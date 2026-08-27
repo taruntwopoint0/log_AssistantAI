@@ -314,6 +314,37 @@
     font-size: 10.5px; color: var(--ink-3); font-family: var(--mono); line-height: 1.6;
   }
 
+  .md > *:first-child { margin-top: 0; }
+  .md > *:last-child { margin-bottom: 0; }
+  .md p { margin: 0 0 9px; }
+  .md h4 {
+    margin: 14px 0 6px; font-size: 13px; font-weight: 650; color: var(--ink);
+  }
+  .md ul, .md ol { margin: 0 0 9px; padding-left: 20px; }
+  .md li { margin: 3px 0; }
+  .md code {
+    background: var(--sunken); border: 1px solid var(--line);
+    border-radius: 2px; padding: 0 4px; font-size: 12px;
+  }
+  .md pre {
+    background: var(--sunken); border: 1px solid var(--line);
+    border-radius: var(--r); padding: 10px 12px; margin: 0 0 10px;
+    overflow-x: auto;
+  }
+  .md pre code { background: none; border: none; padding: 0; font-size: 11.5px; line-height: 1.55; }
+  .md hr { border: none; border-top: 1px solid var(--line); margin: 12px 0; }
+  .md strong { font-weight: 650; }
+
+  .md-table-wrap { overflow-x: auto; margin: 0 0 10px; }
+  .md table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  .md th, .md td {
+    text-align: left; padding: 6px 12px 6px 0; border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  .md th { color: var(--ink-3); font-weight: 600; font-size: 11px;
+           text-transform: uppercase; letter-spacing: 0.05em; }
+  .md tbody tr:last-child td { border-bottom: none; }
+
   .ask-row { display: flex; gap: 7px; }
   .ask-row input {
     flex: 1; background: var(--sunken); color: var(--ink);
@@ -629,6 +660,79 @@ function Sources({ sources }) {
 
 // ---------------------------------------------------------------------------
 
+
+// Minimal markdown renderer for GENERAL answers. HTML is escaped FIRST, so a
+// model that emits tags produces visible text, never live markup. PROJECT
+// answers stay plain text - their prompt forbids markdown and their value is
+// terseness, not formatting.
+function renderMarkdown(src) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const blocks = [];
+
+  // Lift fenced code out first so its contents are not transformed further.
+  let t = esc(src || "").replace(/```[a-zA-Z0-9]*\r?\n?([\s\S]*?)```/g, function (m, code) {
+    blocks.push(code.replace(/\s+$/, ""));
+    return "@@CODE" + (blocks.length - 1) + "@@";
+  });
+
+  const inline = (x) => x
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[\s(])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+
+  const out = [];
+  let list = null;
+  const closeList = () => { if (list) { out.push("</" + list + ">"); list = null; } };
+  const openList = (tag) => {
+    if (list !== tag) { closeList(); out.push("<" + tag + ">"); list = tag; }
+  };
+
+  const lines = t.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    let m;
+    if (!line) { closeList(); continue; }
+
+    // Markdown table: a run of pipe rows, with the --- separator dropped.
+    if (line.charAt(0) === "|" && (lines[i + 1] || "").indexOf("|") >= 0) {
+      closeList();
+      const rows = [];
+      while (i < lines.length && lines[i].trim().charAt(0) === "|") {
+        const cells = lines[i].trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+        if (!cells.every((c) => /^:?-{2,}:?$/.test(c))) rows.push(cells);
+        i++;
+      }
+      i--;
+      if (rows.length) {
+        const head = rows.shift();
+        out.push('<div class="md-table-wrap"><table><thead><tr>'
+          + head.map((c) => "<th>" + inline(c) + "</th>").join("")
+          + "</tr></thead><tbody>"
+          + rows.map((r) => "<tr>" + r.map((c) => "<td>" + inline(c) + "</td>").join("") + "</tr>").join("")
+          + "</tbody></table></div>");
+      }
+      continue;
+    }
+    if (/^@@CODE\d+@@$/.test(line)) { closeList(); out.push(line); continue; }
+    if ((m = line.match(/^#{1,6}\s+(.*)$/))) {
+      closeList(); out.push("<h4>" + inline(m[1]) + "</h4>"); continue;
+    }
+    if (/^([-*_])\1{2,}$/.test(line)) { closeList(); out.push("<hr/>"); continue; }
+    if ((m = line.match(/^[-*+]\s+(.*)$/))) {
+      openList("ul"); out.push("<li>" + inline(m[1]) + "</li>"); continue;
+    }
+    if ((m = line.match(/^\d+[.)]\s+(.*)$/))) {
+      openList("ol"); out.push("<li>" + inline(m[1]) + "</li>"); continue;
+    }
+    closeList();
+    out.push("<p>" + inline(line) + "</p>");
+  }
+  closeList();
+
+  return out.join("").replace(/@@CODE(\d+)@@/g,
+    (m, n) => "<pre><code>" + blocks[Number(n)] + "</code></pre>");
+}
+
 const SUGGESTS = [
   "Which team owns this?",
   "Why is confidence only Medium?",
@@ -717,7 +821,9 @@ function AskTheDiagnosis({ data }) {
                     {t.meta.mode === "GENERAL" ? "GENERAL — AI KNOWLEDGE" : "PROJECT — GROUNDED"}
                   </span>
                 )}
-                <div>{t.text}</div>
+                {t.meta && t.meta.mode === "GENERAL"
+                  ? <div className="md" dangerouslySetInnerHTML={{ __html: renderMarkdown(t.text) }} />
+                  : <div>{t.text}</div>}
                 {t.meta && t.meta.sources && t.meta.sources.length > 0 && (
                   <div className="prov">
                     source: {[...new Set(t.meta.sources)].join(" · ")}

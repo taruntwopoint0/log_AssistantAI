@@ -39,6 +39,11 @@ from .writer import DEFAULT_MODEL, _sanitise
 MAX_TOOLS = 4
 MAX_HISTORY_TURNS = 6
 
+# GENERAL mode is a conversation, not a lookup: it gets a longer memory and
+# room for a real answer with formatting.
+GENERAL_HISTORY_TURNS = 14
+GENERAL_MAX_TOKENS = 4000
+
 PROJECT_RULES = """You are answering questions about an internal incident investigation that has
 already been completed by deterministic code.
 
@@ -63,16 +68,29 @@ Rules, in order of importance:
    a withheld identifier. Reproduce it character for character. Never expand or guess it.
 """
 
-GENERAL_RULES = """You are answering a general technical question for a bank infrastructure engineer.
+GENERAL_RULES = """You are a knowledgeable technical assistant helping a bank infrastructure
+engineer. Answer from your own knowledge, properly and in full.
 
-Use your own technical knowledge. Be accurate, concrete and brief - two to five
-sentences, no markdown, no preamble.
+Be genuinely useful:
+- Answer the actual question. Give the detail the question deserves - a quick factual
+  question gets a short answer, a "how does X work" question gets a real explanation.
+- Use markdown freely where it helps: headings, bullet lists, numbered steps, tables,
+  and fenced code blocks for commands, config or code.
+- Be concrete. Name real tools, real defaults, real config keys, real commands.
+- Follow up naturally across turns; the conversation history is yours to use.
 
-One hard rule: this conversation sits next to a specific live incident investigation,
-and you have NOT been given that investigation's findings. Do not claim, imply or
-guess anything about the current incident. If the question asks what a general fact
-proves about this incident, say plainly that a general explanation is not evidence
-about the current incident, and that they should switch to PROJECT mode for that.
+One boundary, and it is about honesty rather than refusal. This chat sits beside a
+specific incident investigation whose findings you have NOT been given. So:
+- Answer general and background questions fully and helpfully, always.
+- Only when asked to confirm something about THIS specific incident - what caused it,
+  what its evidence shows, whether some general fact proves it - note in your own words
+  that you have not been given this investigation's findings, suggest PROJECT mode for
+  that, and then still answer the general part of the question as helpfully as you can.
+  Write that as a natural sentence; do not copy this instruction's wording.
+- Never invent details about the current incident.
+
+Do not deflect questions you can answer. Do not add disclaimers to ordinary technical
+answers.
 """
 
 SELECTOR_RULES = """Choose which lookups will answer the user's question.
@@ -232,10 +250,10 @@ def _render_facts(results: list[ToolResult]) -> str:
     return "\n".join(lines)
 
 
-def _render_history(history: list[dict[str, str]]) -> str:
+def _render_history(history: list[dict[str, str]], limit: int = MAX_HISTORY_TURNS) -> str:
     if not history:
         return ""
-    turns = history[-MAX_HISTORY_TURNS:]
+    turns = history[-limit:]
     out = ["EARLIER IN THIS CONVERSATION:"]
     for t in turns:
         role = "User" if t.get("role") == "user" else "You"
@@ -340,10 +358,14 @@ def _answer_general(question: str, history: list[dict[str, str]],
                     "PROJECT mode still works without one."),
             mode="GENERAL", grounded=False, selector="n/a",
         )
-    prompt = (GENERAL_RULES + "\n" + _render_history(history)
+    prompt = (GENERAL_RULES + "\n" + _render_history(history, GENERAL_HISTORY_TURNS)
               + f"\nQuestion: {question}\n\nAnswer:")
     try:
-        text = _sanitise(_call_model(prompt, api_key))
+        # Deliberately NOT _sanitise(): that strips headings, bullets, bold and
+        # code fences, which is right for PROJECT's terse grounded prose and
+        # wrong for a general assistant. The dashboard renders this as markdown,
+        # escaping HTML first so model output can never become live markup.
+        text = _call_model(prompt, api_key, max_tokens=GENERAL_MAX_TOKENS).strip()
     except Exception as exc:
         return Answer(
             answer=("The model is unavailable right now. PROJECT mode still works "
