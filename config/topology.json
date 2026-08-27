@@ -1,0 +1,179 @@
+{
+  "system": "BulkSuppliers Supplier Sync",
+  "owner_team": "ALD Automotive Integration",
+  "notes": "Edit this file to adapt the tool to another system. No code change required.",
+  "application": {
+    "id": "BulkSuppliers",
+    "name": "BulkSuppliers Supplier Sync",
+    "description": "Worker that syncs supplier details, addresses and contacts from Aldavar to Galileo via the ALD SAT gateway.",
+    "owner_team": "ALD Automotive Integration",
+    "runs_as_service": "SupplierSyncWorker",
+    "calls": [
+      "gateway.suppliersync.internal"
+    ],
+    "depends_on": [
+      "supplierdb.suppliersync.internal"
+    ],
+    "environment": "Production"
+  },
+  "throughput_baseline": {
+    "seconds_per_record": 0.1795,
+    "derived_from": "39 address records completed in 7s at 11:03 on 2026-08-18",
+    "note": "Used only when the pasted log contains no successful batch to derive a rate from."
+  },
+  "redaction": {
+    "_comment": "Applied to the stage 7 prompt only, before it leaves the machine. Identifiers are swapped for tokens and swapped back in the reply, so the model never receives a real hostname, IP, incident id or team name. System and layer names (Galileo, Aldavar, BulkSuppliers) are NOT redacted - stripping them would leave a prompt too generic to write from. Claim the narrow thing accurately.",
+    "enabled": true,
+    "internal_domain_suffixes": [
+      ".internal"
+    ],
+    "redact_hosts": true,
+    "redact_ips": true,
+    "redact_incident_ids": true,
+    "redact_owners": true
+  },
+  "precedent": {
+    "_comment": "Similarity backend for precedent.py. 'embeddings' does cosine over the NORMALISED SIGNATURE only (never a raw stack trace), calibrated by embeddings.SIMILARITY_FLOOR, and falls back to 'lexical' automatically if the key or network is missing. 'lexical' is deterministic Dice-coefficient matching and needs nothing. Override with INVESTIGATOR_PRECEDENT_BACKEND; the test suite pins lexical so it stays offline and reproducible.",
+    "backend": "embeddings"
+  },
+  "client_timeout_seconds": 100,
+  "client_timeout_note": ".NET HttpClient default. An elapsed time well below this rules the client out as the cutter.",
+  "known_ceilings": [
+    {
+      "seconds": 60,
+      "tolerance": 6,
+      "typical_owner": "API gateway / reverse proxy / load balancer",
+      "note": "A round-number cutoff that no application configures by accident."
+    }
+  ],
+  "sources": [
+    {
+      "id": "app_logs",
+      "name": "Application logs (Serilog)",
+      "connected": true,
+      "checks": "Worker rolling-file sink and stdout"
+    },
+    {
+      "id": "windows_service",
+      "name": "Windows Service health",
+      "connected": true,
+      "checks": "Get-Service SupplierSyncWorker state and last start time"
+    },
+    {
+      "id": "network",
+      "name": "Network connectivity",
+      "connected": true,
+      "checks": "DNS resolution and TCP reachability to dependency hosts"
+    },
+    {
+      "id": "aldavar_db",
+      "name": "Aldavar DB connectivity",
+      "connected": false,
+      "checks": "SQL login, connection pool saturation, blocking chains"
+    },
+    {
+      "id": "database_views",
+      "name": "Database views",
+      "connected": false,
+      "checks": "vw_SupplierDetails row counts and freshness"
+    },
+    {
+      "id": "galileo",
+      "name": "Galileo availability",
+      "connected": false,
+      "checks": "Galileo platform health endpoint and status page"
+    },
+    {
+      "id": "ald_sat",
+      "name": "ALD SAT endpoints",
+      "connected": false,
+      "checks": "gateway.suppliersync.internal route health and gateway config"
+    }
+  ],
+  "layers": [
+    {
+      "id": "GatewayTimeout",
+      "name": "Intermediary timeout on large payloads",
+      "candidate": true,
+      "owner": "Network / API Gateway team",
+      "runbook_id": "RB-GATEWAY-60S",
+      "primary_source": "ald_sat"
+    },
+    {
+      "id": "GalileoDown",
+      "name": "Galileo platform unavailable",
+      "candidate": true,
+      "owner": "Galileo Platform team",
+      "runbook_id": "RB-GALILEO-DOWN",
+      "primary_source": "galileo"
+    },
+    {
+      "id": "Network",
+      "name": "Network path failure",
+      "candidate": true,
+      "owner": "Infrastructure / Network team",
+      "runbook_id": "RB-NETWORK",
+      "primary_source": "network"
+    },
+    {
+      "id": "WindowsService",
+      "name": "Worker service not running",
+      "candidate": true,
+      "owner": "ALD Automotive Integration",
+      "runbook_id": "RB-SERVICE-CRASH",
+      "primary_source": "windows_service"
+    },
+    {
+      "id": "AldavarDB",
+      "name": "Aldavar database unreachable",
+      "candidate": true,
+      "owner": "Database Services",
+      "runbook_id": "RB-ALDAVAR-DB",
+      "primary_source": "aldavar_db"
+    },
+    {
+      "id": "DatabaseViews",
+      "name": "Source view empty or stale",
+      "candidate": true,
+      "owner": "Database Services",
+      "runbook_id": "RB-DB-VIEWS",
+      "primary_source": "database_views"
+    },
+    {
+      "id": "Auth",
+      "name": "Credential or token rejection",
+      "candidate": true,
+      "owner": "ALD Automotive Integration",
+      "runbook_id": "RB-AUTH-401",
+      "primary_source": "ald_sat"
+    },
+    {
+      "id": "Healthy",
+      "name": "No failure detected",
+      "candidate": false,
+      "owner": null,
+      "runbook_id": "RB-HEALTHY",
+      "primary_source": "app_logs"
+    },
+    {
+      "id": "Unknown",
+      "name": "Not recognised",
+      "candidate": false,
+      "owner": null,
+      "runbook_id": "RB-UNKNOWN",
+      "primary_source": null
+    }
+  ],
+  "hosts": {
+    "gateway.suppliersync.internal": {
+      "role": "ALD SAT gateway fronting Galileo",
+      "source": "ald_sat",
+      "behind_intermediary": true
+    },
+    "supplierdb.suppliersync.internal": {
+      "role": "Aldavar SQL Server instance",
+      "source": "aldavar_db",
+      "behind_intermediary": false
+    }
+  }
+}

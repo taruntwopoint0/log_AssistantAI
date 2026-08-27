@@ -1,0 +1,11 @@
+2026-08-24 08:46:02.114 +05:30 [INF] BulkSuppliers worker cycle started
+2026-08-24 08:46:02.119 +05:30 [INF] Total Records Fetched for Supplier Contacts: 2
+2026-08-24 08:46:02.120 +05:30 [INF] Supplier Contacts synced started
+2026-08-24 08:46:03.402 +05:30 [INF] Supplier Contacts synced completed. Status: 200 OK
+2026-08-24 08:46:04.010 +05:30 [INF] Total Records Fetched for Supplier Addresses: 39
+2026-08-24 08:46:04.011 +05:30 [INF] Supplier Addresses synced started
+2026-08-24 08:46:11.120 +05:30 [INF] Supplier Addresses synced completed. Status: 200 OK
+2026-08-24 08:46:11.500 +05:30 [INF] Total Records Fetched for Supplier Details: 31
+2026-08-24 08:46:11.501 +05:30 [INF] Supplier Details synced started
+2026-08-24 08:46:16.640 +05:30 [INF] Supplier Details synced completed. Status: 200 OK
+2026-08-24 08:46:16.700 +05:30 [INF] BulkSuppliers worker cycle completed

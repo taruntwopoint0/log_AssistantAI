@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Secrets — never commit
+.env
+*.key
+secrets.json
+
+# Local runtime state
+predictions.jsonl
+.venv/
+venv/

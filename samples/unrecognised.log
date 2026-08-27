@@ -1,0 +1,6 @@
+2026-08-25 03:10:00.220 +05:30 [INF] Nightly reconciliation started
+2026-08-25 03:10:01.455 +05:30 [ERR] Payload transform aborted for batch 7741
+System.Text.Json.JsonException: '<' is an invalid start of a value. Path: $ | LineNumber: 0 | BytePositionInLine: 0.
+   at System.Text.Json.ThrowHelper.ReThrowWithPath(ReadStack& state, JsonReaderException ex)
+   at SupplierSync.Transform.PayloadMapper.Deserialize(String raw) in C:\src\SupplierSync\Transform\PayloadMapper.cs:line 96
+2026-08-25 03:10:01.600 +05:30 [INF] Email Trigger sent

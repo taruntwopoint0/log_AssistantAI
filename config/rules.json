@@ -1,0 +1,199 @@
+{
+  "_comment": "Evidence -> layer. Evaluated by engine/rules_engine.py with no AI involvement. Highest priority matching rule wins. A rule matches only if every condition in all_of holds and no condition in none_of holds. Facts come from engine/parser.py; the supported vocabulary is listed in that module.",
+
+  "_operators": {
+    "eq": "fact equals value",
+    "ne": "fact does not equal value",
+    "gt": "fact > value",
+    "gte": "fact >= value",
+    "lt": "fact < value",
+    "lte": "fact <= value",
+    "in": "fact is one of value (a list)",
+    "contains": "fact is a list containing value, case-insensitive",
+    "matches": "fact is text containing value as a case-insensitive substring",
+    "near": "fact is numeric and within tolerance of value",
+    "exists": "fact is present and not null",
+    "absent": "fact is missing or null"
+  },
+
+  "rules": [
+    {
+      "id": "R-GATEWAY-CEILING",
+      "layer": "GatewayTimeout",
+      "priority": 100,
+      "specificity": "pinpoint",
+      "title": "Large batch cut at a fixed ceiling mid-response",
+      "rationale": "The connection carried a partial response and was then cut at a round-number elapsed time, on a batch too large to have finished inside that ceiling. A component with a configured response timeout is closing the connection.",
+      "all_of": [
+        { "fact": "error_text", "op": "matches", "value": "response ended prematurely" },
+        { "fact": "elapsed_seconds", "op": "near", "value": 60, "tolerance": 6 },
+        { "fact": "record_count", "op": "gte", "value": 100 },
+        { "fact": "projection_exceeds_elapsed", "op": "eq", "value": true }
+      ],
+      "eliminates": ["GalileoDown", "Network", "AldavarDB", "DatabaseViews", "WindowsService", "Auth"],
+      "elimination_reasons": {
+        "GalileoDown": "Response bytes were received before the cut, and small batches to the same host returned 200 in the same period. A platform that is down does not answer selectively by size.",
+        "Network": "TCP connected and data flowed. A network path failure fails before any response begins.",
+        "AldavarDB": "Records were fetched from the database successfully before the outbound call started.",
+        "DatabaseViews": "The source view returned a non-zero record count.",
+        "WindowsService": "The worker was running and logging throughout the failure.",
+        "Auth": "The request was accepted and began returning data, so the credential was not rejected."
+      }
+    },
+
+    {
+      "id": "R-AUTH-REJECTED",
+      "layer": "Auth",
+      "priority": 90,
+      "specificity": "pinpoint",
+      "title": "Endpoint rejected the credential",
+      "rationale": "The endpoint answered with an authentication or authorisation status. The request reached the application and was refused at the door.",
+      "all_of": [
+        { "fact": "http_status", "op": "in", "value": [401, 403] }
+      ],
+      "eliminates": ["GatewayTimeout", "GalileoDown", "Network", "AldavarDB", "DatabaseViews", "WindowsService"],
+      "elimination_reasons": {
+        "GatewayTimeout": "The response was immediate and carried a status code. Nothing timed out.",
+        "GalileoDown": "The endpoint answered. A platform that is down does not return 401.",
+        "Network": "The request reached the endpoint and received a reply.",
+        "AldavarDB": "The database step completed before the outbound call.",
+        "DatabaseViews": "The source view returned a non-zero record count.",
+        "WindowsService": "The worker was running and logging throughout."
+      }
+    },
+
+    {
+      "id": "R-GALILEO-UNAVAILABLE",
+      "layer": "GalileoDown",
+      "priority": 85,
+      "specificity": "strong",
+      "title": "Platform returned an unavailable status at every batch size",
+      "rationale": "The endpoint answered with a server-side unavailable status, and it did so regardless of how large the batch was. Size is not the variable.",
+      "all_of": [
+        { "fact": "http_status", "op": "in", "value": [502, 503, 504] },
+        { "fact": "small_batches_succeeded", "op": "eq", "value": false }
+      ],
+      "eliminates": ["Network", "AldavarDB", "DatabaseViews", "WindowsService", "Auth", "GatewayTimeout"],
+      "elimination_reasons": {
+        "Network": "The endpoint answered with an HTTP status, so the path is intact.",
+        "AldavarDB": "The database step completed before the outbound call.",
+        "DatabaseViews": "The source view returned a non-zero record count.",
+        "WindowsService": "The worker was running and logging throughout.",
+        "Auth": "The credential was accepted; the status is a server-side failure, not a rejection.",
+        "GatewayTimeout": "Small batches failed too. A ceiling on response time would let small batches through."
+      }
+    },
+
+    {
+      "id": "R-NETWORK-UNREACHABLE",
+      "layer": "Network",
+      "priority": 80,
+      "specificity": "pinpoint",
+      "title": "Connection never established",
+      "rationale": "The failure is at connect level. No response bytes were ever received, so nothing downstream of the network path can be implicated.",
+      "any_of": [
+        { "fact": "error_text", "op": "matches", "value": "connection refused" },
+        { "fact": "error_text", "op": "matches", "value": "no such host is known" },
+        { "fact": "error_text", "op": "matches", "value": "actively refused" },
+        { "fact": "exception_types", "op": "contains", "value": "SocketException" }
+      ],
+      "eliminates": ["GatewayTimeout", "GalileoDown", "Auth", "AldavarDB", "DatabaseViews"],
+      "elimination_reasons": {
+        "GatewayTimeout": "Nothing was cut mid-response because no response ever started.",
+        "GalileoDown": "The platform cannot be assessed. The request never reached it.",
+        "Auth": "No credential was evaluated. The connection failed first.",
+        "AldavarDB": "The database step completed before the outbound call.",
+        "DatabaseViews": "The source view returned a non-zero record count."
+      }
+    },
+
+    {
+      "id": "R-ALDAVAR-UNREACHABLE",
+      "layer": "AldavarDB",
+      "priority": 75,
+      "specificity": "pinpoint",
+      "title": "Database call failed before any records were fetched",
+      "rationale": "A SQL-level failure occurred at the fetch step. The sync never progressed to its outbound call.",
+      "any_of": [
+        { "fact": "exception_types", "op": "contains", "value": "SqlException" },
+        { "fact": "error_text", "op": "matches", "value": "login failed for user" },
+        { "fact": "error_text", "op": "matches", "value": "timeout expired" },
+        { "fact": "error_text", "op": "matches", "value": "pool size was reached" }
+      ],
+      "eliminates": ["GatewayTimeout", "GalileoDown", "Auth", "WindowsService"],
+      "elimination_reasons": {
+        "GatewayTimeout": "No outbound call was made, so nothing could be cut by an intermediary.",
+        "GalileoDown": "Galileo was never contacted on this run.",
+        "Auth": "The endpoint credential was never presented.",
+        "WindowsService": "The worker was running and logging throughout."
+      }
+    },
+
+    {
+      "id": "R-SERVICE-DOWN",
+      "layer": "WindowsService",
+      "priority": 70,
+      "specificity": "pinpoint",
+      "title": "Worker service stopped or faulted",
+      "rationale": "The worker itself terminated. Nothing downstream can be assessed from a run that did not complete its own startup path.",
+      "any_of": [
+        { "fact": "service_state", "op": "in", "value": ["Stopped", "StopPending", "Paused"] },
+        { "fact": "error_text", "op": "matches", "value": "unhandled exception" },
+        { "fact": "error_text", "op": "matches", "value": "the service terminated unexpectedly" },
+        { "fact": "error_text", "op": "matches", "value": "application is shutting down" }
+      ],
+      "eliminates": ["GatewayTimeout", "GalileoDown", "Auth", "DatabaseViews"],
+      "elimination_reasons": {
+        "GatewayTimeout": "The worker stopped before completing an outbound call.",
+        "GalileoDown": "Galileo was never contacted on this run.",
+        "Auth": "No credential was presented.",
+        "DatabaseViews": "The view was never queried to completion."
+      }
+    },
+
+    {
+      "id": "R-VIEW-EMPTY",
+      "layer": "DatabaseViews",
+      "priority": 60,
+      "specificity": "strong",
+      "title": "Run completed but fetched zero records",
+      "rationale": "A clean exit with no rows is a silent failure. The source view is empty or stale, and nothing threw an exception to signal it.",
+      "all_of": [
+        { "fact": "has_error", "op": "eq", "value": false },
+        { "fact": "record_count", "op": "eq", "value": 0 }
+      ],
+      "eliminates": ["GatewayTimeout", "GalileoDown", "Network", "Auth", "WindowsService", "AldavarDB"],
+      "elimination_reasons": {
+        "GatewayTimeout": "No failure occurred. Nothing was cut.",
+        "GalileoDown": "No outbound failure was recorded.",
+        "Network": "No connectivity failure was recorded.",
+        "Auth": "No credential rejection was recorded.",
+        "WindowsService": "The worker ran to completion.",
+        "AldavarDB": "The database answered. It returned an empty result rather than an error."
+      }
+    },
+
+    {
+      "id": "R-HEALTHY-RUN",
+      "layer": "Healthy",
+      "priority": 10,
+      "specificity": "strong",
+      "title": "Run completed with records and no errors",
+      "rationale": "Every batch returned successfully and a non-zero record count was synced.",
+      "all_of": [
+        { "fact": "has_error", "op": "eq", "value": false },
+        { "fact": "record_count", "op": "gt", "value": 0 }
+      ],
+      "eliminates": ["GatewayTimeout", "GalileoDown", "Network", "Auth", "WindowsService", "AldavarDB", "DatabaseViews"],
+      "elimination_reasons": {
+        "GatewayTimeout": "No failure occurred on this run.",
+        "GalileoDown": "The endpoint answered successfully.",
+        "Network": "The path was intact throughout.",
+        "Auth": "The credential was accepted.",
+        "WindowsService": "The worker ran to completion.",
+        "AldavarDB": "The database answered successfully.",
+        "DatabaseViews": "The view returned a non-zero record count."
+      }
+    }
+  ]
+}

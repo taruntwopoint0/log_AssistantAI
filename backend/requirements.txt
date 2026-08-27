@@ -1,0 +1,12 @@
+# Verified against Python 3.12.10 on 2026-08-25.
+fastapi>=0.141.1
+uvicorn[standard]>=0.52.4
+
+# Stage 7 only. The engine runs without it: writer.py falls back to a
+# deterministic template when the SDK or the API key is missing.
+# This is the CURRENT Google SDK. Do not use google-generativeai, which is
+# deprecated, and do not use the gemini-1.5-* or gemini-2.0-* model ids.
+google-genai>=1.0.0
+
+# Tests
+pytest>=9.1.1

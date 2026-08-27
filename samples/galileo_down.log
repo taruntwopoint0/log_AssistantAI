@@ -1,0 +1,14 @@
+2026-08-19 09:15:01.220 +05:30 [INF] BulkSuppliers worker cycle started
+2026-08-19 09:15:01.480 +05:30 [INF] Total Records Fetched for Supplier Contacts: 6
+2026-08-19 09:15:01.481 +05:30 [INF] Supplier Contacts synced started
+2026-08-19 09:15:02.109 +05:30 [ERR] Failed due to an issue in method "https://gateway.suppliersync.internal/api/bulkSuppliers/v1.0/api/contact":
+System.Net.Http.HttpRequestException: Response status code does not indicate success: 503 (Service Unavailable).
+   at System.Net.Http.HttpResponseMessage.EnsureSuccessStatusCode()
+   at SupplierSync.Api.FetchGalileoApi.GetAPIResponse(String url, String payload) in C:\src\SupplierSync\Api\FetchGalileoApi.cs:line 71
+2026-08-19 09:15:02.400 +05:30 [INF] Total Records Fetched for Supplier Details: 512
+2026-08-19 09:15:02.401 +05:30 [INF] Supplier Details synced started
+2026-08-19 09:15:03.077 +05:30 [ERR] Failed due to an issue in method "https://gateway.suppliersync.internal/api/bulkSuppliers/v1.0/api/supplier":
+System.Net.Http.HttpRequestException: Response status code does not indicate success: 503 (Service Unavailable).
+   at System.Net.Http.HttpResponseMessage.EnsureSuccessStatusCode()
+   at SupplierSync.Api.FetchGalileoApi.GetAPIResponse(String url, String payload) in C:\src\SupplierSync\Api\FetchGalileoApi.cs:line 71
+2026-08-19 09:15:03.310 +05:30 [INF] Email Trigger sent

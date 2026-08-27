@@ -1,0 +1,8 @@
+2026-08-21 02:00:00.004 +05:30 [INF] BulkSuppliers worker cycle started
+2026-08-21 02:00:00.240 +05:30 [INF] Total Records Fetched for Supplier Details: 402
+2026-08-21 02:00:00.241 +05:30 [INF] Supplier Details synced started
+2026-08-21 02:00:04.918 +05:30 [FTL] Unhandled exception. Application is shutting down.
+System.NullReferenceException: Object reference not set to an instance of an object.
+   at SupplierSync.Worker.SupplierSyncJob.MapContact(SupplierDto dto) in C:\src\SupplierSync\Worker\SupplierSyncJob.cs:line 137
+   at SupplierSync.Worker.SupplierSyncJob.ExecuteAsync(CancellationToken stoppingToken) in C:\src\SupplierSync\Worker\SupplierSyncJob.cs:line 88
+2026-08-21 02:00:05.002 +05:30 [WRN] Service SupplierSyncWorker is Stopped

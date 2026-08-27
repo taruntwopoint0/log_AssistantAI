@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI Investigation Assistant</title>
+
+<!-- No build step. React and Babel come from CDN and JSX compiles in the
+     browser. If the demo machine has no internet, vendor these three files
+     into static/vendor/ and change the src attributes. -->
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.24.7/babel.min.js"></script>
+
+<style>
+  /* Design notes: one accent colour, hairline rules instead of fills, a single
+     3px radius, no shadows, no gradients, no glows. Semantic colour appears only
+     as small text or a 2px left rule, never as a tinted panel. Numbers are
+     tabular so columns line up. The page should read like an internal report,
+     not a dashboard product. */
+
+  :root {
+    --bg:        #14161a;
+    --surface:   #1b1e24;
+    --sunken:    #16181d;
+    --line:      #2a2e36;
+    --line-mid:  #3a404a;
+    --ink:       #e4e7ec;
+    --ink-2:     #a2a9b4;
+    --ink-3:     #8a919d;
+    --accent:    #74a8f0;
+    --accent-bg: #1b2634;
+    --on-accent: #10141a;
+    --red:       #e08b82;
+    --amber:     #d6ac5e;
+    --green:     #74c295;
+    --r:         3px;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+    font-variant-numeric: tabular-nums;
+  }
+  b, strong { font-weight: 600; }
+  code { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+
+  /* ---------- masthead ---------- */
+  header {
+    background: var(--surface); border-bottom: 1px solid var(--line-mid);
+    padding: 14px 28px; display: flex; align-items: baseline; gap: 14px;
+    flex-wrap: wrap;
+  }
+  header h1 {
+    font-size: 15px; margin: 0; font-weight: 600; letter-spacing: -0.005em;
+  }
+  header .sub {
+    font-size: 13px; color: var(--ink-2);
+    padding-left: 14px; border-left: 1px solid var(--line);
+  }
+  header .spacer { flex: 1; }
+  header .meta { font-size: 11.5px; color: var(--ink-3); font-family: var(--mono); }
+
+  /* ---------- layout ---------- */
+  .layout {
+    display: grid; grid-template-columns: minmax(320px, 30%) 1fr;
+    gap: 18px; padding: 18px 28px 72px; align-items: start;
+    max-width: 1680px;
+  }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--r); padding: 16px 18px; margin-bottom: 14px;
+  }
+  .panel h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--ink-3); margin: 0 0 12px; font-weight: 600;
+  }
+
+  /* ---------- input ---------- */
+  textarea {
+    width: 100%; min-height: 240px; resize: vertical;
+    background: var(--sunken); color: var(--ink);
+    border: 1px solid var(--line-mid); border-radius: var(--r);
+    padding: 10px 11px; font-family: var(--mono); font-size: 11.5px; line-height: 1.55;
+  }
+  textarea:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+  .chip {
+    background: var(--surface); border: 1px solid var(--line-mid); color: var(--ink-2);
+    border-radius: var(--r); padding: 4px 9px; font: inherit; font-size: 12px;
+    cursor: pointer; line-height: 1.4;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+  .chip.hero { border-color: var(--line-mid); color: var(--ink); font-weight: 550; }
+  .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  button.primary {
+    width: 100%; margin-top: 12px; padding: 9px;
+    background: #2c5c9e; color: #eef4fc; border: 1px solid #3568ae;
+    border-radius: var(--r); font: inherit; font-weight: 600; font-size: 13.5px;
+    cursor: pointer;
+  }
+  button.primary:hover { background: #3568ae; border-color: #4076bd; }
+  button.primary:disabled { background: var(--line-mid); border-color: var(--line-mid); color: var(--ink-3); cursor: default; }
+
+  .toggle {
+    display: flex; align-items: flex-start; gap: 9px; margin-top: 13px;
+    padding: 10px 11px; background: var(--sunken); border: 1px solid var(--line);
+    border-radius: var(--r); cursor: pointer;
+  }
+  .toggle input { margin: 2px 0 0; accent-color: var(--accent); }
+  .toggle .t-label { font-size: 13px; font-weight: 550; }
+  .toggle .t-help { font-size: 12px; color: var(--ink-2); margin-top: 2px; line-height: 1.5; }
+
+  /* ---------- verdict ---------- */
+  .verdict { border-left: 2px solid var(--ink-3); }
+  .verdict.High         { border-left-color: var(--green); }
+  .verdict.Medium       { border-left-color: var(--amber); }
+  .verdict.Inconclusive { border-left-color: var(--ink-3); }
+
+  .verdict-top {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    padding-bottom: 12px; border-bottom: 1px solid var(--line);
+  }
+  .verdict-layer { font-size: 19px; font-weight: 600; letter-spacing: -0.012em; }
+
+  .band {
+    padding: 2px 8px; border-radius: var(--r); font-size: 10.5px; font-weight: 700;
+    letter-spacing: 0.07em; text-transform: uppercase; border: 1px solid;
+  }
+  .band.High         { color: var(--green); border-color: #33503f; background: #18231d; }
+  .band.Medium       { color: var(--amber); border-color: #4e4429; background: #221e15; }
+  .band.Inconclusive { color: var(--ink-2); border-color: var(--line-mid); background: var(--sunken); }
+
+  .score { font-size: 12.5px; color: var(--ink-2); cursor: help; }
+  .score b { font-family: var(--mono); font-weight: 600; color: var(--ink); }
+  .score-cap { color: var(--amber); }
+  .owner { color: var(--ink-2); font-size: 13px; margin-left: auto; }
+
+  .narrative { margin-top: 13px; line-height: 1.65; color: var(--ink); }
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 10px;
+    padding: 0 5px; border: 1px solid var(--line-mid); border-radius: var(--r);
+    color: var(--ink-3); margin-left: 7px; vertical-align: 1px;
+  }
+
+  .cap-note {
+    margin-top: 13px; padding-top: 11px; border-top: 1px solid var(--line);
+    font-size: 12.5px; color: var(--ink-2); line-height: 1.55;
+  }
+
+  /* ---------- action blocks: a rule, not a coloured box ---------- */
+  .do-label {
+    display: block; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.08em; font-weight: 700; margin-bottom: 5px; color: var(--green);
+  }
+  .do-label.not { color: var(--red); }
+  .do-this {
+    margin-top: 14px; padding: 2px 0 2px 12px;
+    border-left: 2px solid var(--green); font-size: 13.5px; line-height: 1.6;
+  }
+  .not-this {
+    margin-top: 13px; padding: 2px 0 2px 12px;
+    border-left: 2px solid var(--red); font-size: 13px;
+  }
+  .not-this ul.clean li { color: var(--ink-2); padding: 3px 0; border-bottom: none; }
+
+  /* ---------- timing ruler ---------- */
+  .ruler-row { margin-bottom: 14px; }
+  .ruler-label {
+    display: flex; justify-content: space-between; gap: 16px;
+    font-size: 12.5px; color: var(--ink-2); margin-bottom: 5px;
+  }
+  .ruler-label b { color: var(--ink); font-family: var(--mono); font-weight: 600; }
+  .track {
+    position: relative; height: 22px; background: var(--sunken);
+    border: 1px solid var(--line); border-radius: var(--r); overflow: hidden;
+  }
+  .bar { position: absolute; top: 0; bottom: 0; left: 0; }
+  .bar.cut    { background: #7d504b; }
+  .bar.needed { background: #3d4a5c; }
+  .marker { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px dashed; }
+  .marker.ceiling { border-color: var(--red); }
+  .marker.client  { border-color: var(--ink-3); }
+  .marker-legend {
+    position: relative; height: 16px; margin-top: 3px;
+    font-size: 10.5px; font-family: var(--mono); color: var(--ink-3);
+  }
+  .marker-legend span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .ruler-conclusion {
+    margin-top: 14px; padding: 2px 0 2px 12px; border-left: 2px solid var(--line-mid);
+    font-size: 13px; line-height: 1.65; color: var(--ink);
+  }
+
+  /* ---------- lists ---------- */
+  ul.clean { list-style: none; padding: 0; margin: 0; }
+  ul.clean li {
+    padding: 7px 0; border-bottom: 1px solid var(--line);
+    display: flex; gap: 12px; align-items: baseline; font-size: 13px;
+  }
+  ul.clean li:last-child { border-bottom: none; }
+  .src-tag {
+    font-family: var(--mono); font-size: 10.5px; color: var(--ink-3);
+    flex-shrink: 0; width: 108px; text-align: left;
+    text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .derived { color: var(--ink); }
+  .elim-layer {
+    font-weight: 600; color: var(--ink); min-width: 116px; flex-shrink: 0;
+    font-size: 12.5px;
+  }
+
+  /* ---------- confidence ---------- */
+  .dim-row { margin-bottom: 12px; }
+  .dim-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 12.5px; margin-bottom: 4px;
+  }
+  .dim-name { font-weight: 550; text-transform: capitalize; }
+  .dim-w { color: var(--ink-3); font-family: var(--mono); font-size: 11px; }
+  .dim-track { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; }
+  .dim-fill { height: 100%; background: var(--accent); }
+  .dim-detail { font-size: 12px; color: var(--ink-2); margin-top: 4px; line-height: 1.5; }
+
+  /* ---------- sources ---------- */
+  .src-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+  @media (max-width: 620px) { .src-grid { grid-template-columns: 1fr; } }
+  .src-item {
+    display: flex; align-items: center; gap: 9px; padding: 7px 0;
+    font-size: 12.5px; border-bottom: 1px solid var(--line);
+  }
+  .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .dot.on  { background: var(--green); }
+  .dot.off { background: transparent; border: 1px solid var(--line-mid); }
+  .src-item.off { color: var(--ink-3); }
+
+  /* ---------- runbook ---------- */
+  .rb-block { margin-bottom: 14px; }
+  .rb-block h3 {
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.07em;
+    color: var(--ink-3); margin: 0 0 6px; font-weight: 600;
+  }
+  .rb-donot li { color: var(--ink-2); }
+
+  /* ---------- precedents ---------- */
+  .prec { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .prec:last-child { border-bottom: none; padding-bottom: 0; }
+  .prec:first-child { padding-top: 0; }
+  .prec-top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .prec-id { font-family: var(--mono); font-size: 11.5px; color: var(--ink-2); }
+  .prec-sim { font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); }
+  .prec-title { font-weight: 600; margin: 4px 0 3px; font-size: 13px; }
+  .prec-res { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+  .held { font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; }
+  .held.yes { color: var(--green); }
+  .held.no  { color: var(--red); }
+
+  /* ---------- notices ---------- */
+  .warn {
+    padding: 9px 12px; border: 1px solid var(--line-mid); border-left: 2px solid var(--amber);
+    border-radius: var(--r); background: var(--surface);
+    color: var(--ink-2); font-size: 12.5px; margin-bottom: 10px;
+  }
+  .err {
+    padding: 10px 12px; border: 1px solid var(--line-mid); border-left: 2px solid var(--red);
+    border-radius: var(--r); background: var(--surface); color: var(--ink); font-size: 13px;
+  }
+  .empty { color: var(--ink-3); text-align: center; padding: 56px 20px; font-size: 13.5px; line-height: 1.7; }
+
+  /* ---------- working disclosure ---------- */
+  .working-bar {
+    display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+    padding: 10px 18px; margin-bottom: 14px; cursor: pointer;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--r);
+  }
+  .working-bar:hover { border-color: var(--line-mid); }
+  .working-toggle { color: var(--accent); font-size: 12.5px; font-weight: 600; }
+  .strip-text { color: var(--ink-3); font-size: 12px; }
+
+  /* ---------- ask the diagnosis ---------- */
+  .ask-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .ask-head h2 { margin: 0; }
+  .modes { display: flex; border: 1px solid var(--line-mid); border-radius: var(--r); overflow: hidden; }
+  .modes button {
+    border: none; background: var(--surface); color: var(--ink-3); cursor: pointer;
+    font: inherit; font-size: 11px; font-weight: 600; padding: 4px 11px;
+    letter-spacing: 0.06em;
+  }
+  .modes button + button { border-left: 1px solid var(--line-mid); }
+  .modes button.on { background: #2c5c9e; color: #eef4fc; }
+  .mode-help { font-size: 12px; color: var(--ink-3); }
+
+  .thread { display: flex; flex-direction: column; gap: 16px; margin-bottom: 14px; }
+  .turn-user {
+    font-size: 13px; font-weight: 550; color: var(--ink);
+    padding-left: 11px; border-left: 2px solid var(--line-mid);
+  }
+  .turn-bot { font-size: 13.5px; line-height: 1.65; color: var(--ink); }
+  .turn-bot .bot-badge {
+    display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em;
+    margin-bottom: 5px;
+  }
+  .bot-badge.project { color: var(--green); }
+  .bot-badge.general { color: var(--accent); }
+  .prov {
+    margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--line);
+    font-size: 10.5px; color: var(--ink-3); font-family: var(--mono); line-height: 1.6;
+  }
+
+  .ask-row { display: flex; gap: 7px; }
+  .ask-row input {
+    flex: 1; background: var(--sunken); color: var(--ink);
+    border: 1px solid var(--line-mid); border-radius: var(--r); padding: 8px 11px;
+    font: inherit; font-size: 13px;
+  }
+  .ask-row input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+  .ask-row button {
+    background: var(--surface); color: var(--accent);
+    border: 1px solid var(--line-mid); border-radius: var(--r);
+    padding: 0 16px; font: inherit; font-weight: 600; font-size: 13px; cursor: pointer;
+  }
+  .ask-row button:hover:not(:disabled) { border-color: var(--accent); }
+  .ask-row button:disabled { color: var(--ink-3); cursor: default; }
+  .suggests { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
+
+  details summary { list-style: none; }
+  details summary::-webkit-details-marker { display: none; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback } = React;
+
+const fmt = (n, d = 0) =>
+  n === null || n === undefined ? "—" : Number(n).toFixed(d);
+
+// ---------------------------------------------------------------------------
+// The timing ruler. This is the visual that carries the whole diagnosis: what
+// the batch actually needed, against the ceiling that cut it.
+// ---------------------------------------------------------------------------
+function TimingRuler({ timing }) {
+  const { elapsed_seconds, projected_seconds, ceiling_seconds,
+          client_timeout_seconds, record_count, seconds_per_record,
+          rate_source, rate_basis } = timing;
+
+  if (elapsed_seconds === null || elapsed_seconds === undefined) return null;
+
+  const scale = Math.max(
+    projected_seconds || 0, elapsed_seconds || 0, client_timeout_seconds || 0
+  ) * 1.08;
+  if (!scale) return null;
+  const pct = (v) => Math.min(100, ((v || 0) / scale) * 100);
+
+  const cut = ceiling_seconds !== null && ceiling_seconds !== undefined;
+  const needsMore = projected_seconds && projected_seconds > elapsed_seconds;
+
+  return (
+    <div className="panel">
+      <h2>Timing</h2>
+
+      <div className="ruler-row">
+        <div className="ruler-label">
+          <span>Time before the connection was cut</span>
+          <b>{fmt(elapsed_seconds)}s</b>
+        </div>
+        <div className="track">
+          <div className="bar cut" style={{ width: pct(elapsed_seconds) + "%" }} />
+        </div>
+      </div>
+
+      {projected_seconds ? (
+        <div className="ruler-row">
+          <div className="ruler-label">
+            <span>
+              Time {record_count} records actually need at {fmt(seconds_per_record, 3)}s/record
+              {rate_source === "baseline" ? " (configured baseline)" : " (measured in this log)"}
+            </span>
+            <b>{fmt(projected_seconds)}s</b>
+          </div>
+          <div className="track">
+            <div className="bar needed" style={{ width: pct(projected_seconds) + "%" }} />
+            {cut && (
+              <div className="marker ceiling" style={{ left: pct(ceiling_seconds) + "%" }} />
+            )}
+            {client_timeout_seconds && (
+              <div className="marker client" style={{ left: pct(client_timeout_seconds) + "%" }} />
+            )}
+          </div>
+          <div className="marker-legend">
+            {cut && (
+              <span style={{ left: pct(ceiling_seconds) + "%", color: "var(--red)" }}>
+                {fmt(ceiling_seconds)}s ceiling
+              </span>
+            )}
+            {client_timeout_seconds && (
+              <span style={{ left: pct(client_timeout_seconds) + "%" }}>
+                {fmt(client_timeout_seconds)}s client limit
+              </span>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {cut && needsMore && (
+        <div className="ruler-conclusion">
+          <b>{record_count} records at {fmt(seconds_per_record, 3)}s/record needs about{" "}
+          {fmt(projected_seconds)}s.</b> Something cut the connection at {fmt(elapsed_seconds)}s.
+          The client&rsquo;s own limit is {fmt(client_timeout_seconds)}s, so the client is not
+          what cut it. A round-number ceiling below the time the work actually takes is a
+          configured timeout on an intermediary, not congestion and not a platform outage.
+          {rate_basis && <div style={{ marginTop: 6, color: "var(--ink-2)", fontSize: 12 }}>
+            Rate derived from: {rate_basis}
+          </div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Evidence({ evidence }) {
+  if (!evidence.length) return null;
+  return (
+    <div className="panel">
+      <h2>Evidence &middot; {evidence.length} observation{evidence.length === 1 ? "" : "s"}</h2>
+      <ul className="clean">
+        {evidence.map((e, i) => (
+          <li key={i}>
+            <span className="src-tag">{e.source}</span>
+            <span className={e.derived ? "derived" : ""}>
+              {e.summary}
+              {e.time && <span className="tag">{e.time}</span>}
+              {e.derived && <span className="tag">derived</span>}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Eliminated({ eliminated }) {
+  const keys = Object.keys(eliminated || {});
+  if (!keys.length) return null;
+  return (
+    <div className="panel">
+      <h2>Ruled out &middot; {keys.length} layer{keys.length === 1 ? "" : "s"}</h2>
+      <ul className="clean">
+        {keys.map((k) => (
+          <li key={k}>
+            <span className="elim-layer">{k}</span>
+            <span style={{ color: "var(--ink-2)" }}>{eliminated[k]}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function Precedents({ precedents }) {
+  if (!precedents || !precedents.length) return null;
+  return (
+    <div className="panel">
+      <h2>Matching past incidents</h2>
+      {precedents.map((p) => (
+        <div className="prec" key={p.incident_id}>
+          <div className="prec-top">
+            <span className="prec-id">{p.incident_id} &middot; {p.date}</span>
+            <span className="prec-sim">
+              {p.recurrence > 1 && (
+                <span title={"also " + p.also.join(", ")}>seen {p.recurrence}&times; &middot; </span>
+              )}
+              {(p.similarity * 100).toFixed(0)}% match{" "}
+              <span className={"held " + (p.fix_held ? "yes" : "no")}>
+                {p.fix_held ? "fix held" : "fix did not hold"}
+              </span>
+            </span>
+          </div>
+          <div className="prec-title">{p.title}</div>
+          <div className="prec-res">{p.resolution}</div>
+          {p.time_to_resolve_hours != null && (
+            <div className="prec-res" style={{ marginTop: 4, color: "var(--ink-3)" }}>
+              Resolved by {p.resolved_by} in {p.time_to_resolve_hours}h
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Runbook({ runbook, runbookId }) {
+  if (!runbook) return null;
+  return (
+    <div className="panel">
+      <h2>Runbook &middot; {runbookId}</h2>
+      <div style={{ fontWeight: 640, marginBottom: 10 }}>{runbook.title}</div>
+
+      <div className="rb-block">
+        <h3>Symptom</h3>
+        <div style={{ fontSize: 13, color: "var(--ink-2)" }}>{runbook.symptom}</div>
+      </div>
+
+      {runbook.checks && runbook.checks.length > 0 && (
+        <div className="rb-block">
+          <h3>Checks</h3>
+          <ul className="clean">
+            {runbook.checks.map((c, i) => <li key={i}>{c}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {runbook.escalate_to && (
+        <div className="rb-block" style={{ marginBottom: 0 }}>
+          <h3>Escalate to</h3>
+          <div style={{ fontSize: 13 }}>{runbook.escalate_to}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConfidenceBreakdown({ confidence }) {
+  return (
+    <div className="panel">
+      <h2>
+        Why {confidence.band} &middot; evidence score {Math.round(confidence.raw_score * 100)}%
+        {confidence.capped && ` — capped from ${confidence.raw_band}`}
+      </h2>
+      {confidence.dimensions.map((d) => (
+        <div
+          className="dim-row"
+          key={d.name}
+          title={`weight ${d.weight.toFixed(2)} × score ${d.score.toFixed(2)} = ${d.contribution.toFixed(3)}`}
+        >
+          <div className="dim-head">
+            <span className="dim-name">{d.name}</span>
+            <span className="dim-w">{Math.round(d.score * 100)}%</span>
+          </div>
+          <div className="dim-track">
+            <div className="dim-fill" style={{ width: (d.score * 100) + "%" }} />
+          </div>
+          <div className="dim-detail">{d.detail}</div>
+        </div>
+      ))}
+      <div style={{ fontSize: 12, color: "var(--ink-3)", marginTop: 10, lineHeight: 1.6 }}>
+        Scored from the evidence, never asked of the model. A model rating its own
+        confidence answers 90% every time.
+      </div>
+    </div>
+  );
+}
+
+// Shows exactly what left the machine at stage 7. This is the panel to put in
+// front of a risk reviewer: the claim is demonstrable, not asserted.
+function SentToModel({ data }) {
+  if (data.narrative_source !== "gemini") return null;
+  const r = data.redactions || [];
+  return (
+    <div className="panel">
+      <h2>Sent to the model &middot; {r.length} identifier{r.length === 1 ? "" : "s"} withheld</h2>
+      <div style={{ fontSize: 12.5, color: "var(--ink-2)", marginBottom: 10, lineHeight: 1.6 }}>
+        The raw log, the stack trace and the error text never leave this machine. Only
+        the derived summary is sent, and these identifiers were swapped for tokens
+        before it went and swapped back in the reply.
+      </div>
+      {r.length > 0 && (
+        <ul className="clean">
+          {r.map((x) => (
+            <li key={x.token}>
+              <span className="src-tag">{x.kind}</span>
+              <span>
+                <code>{x.token}</code>
+                <span style={{ color: "var(--ink-3)" }}> &nbsp;&larr;&nbsp; </span>
+                <span>{x.value}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div style={{ marginTop: 10, fontSize: 12.5 }}>
+        <span className={"held " + (data.leak_check_passed ? "yes" : "no")}>
+          {data.leak_check_passed
+            ? "leak check passed"
+            : "leak check FAILED — prompt withheld, template used"}
+        </span>
+      </div>
+      {data.prompt_sent && (
+        <details style={{ marginTop: 12 }}>
+          <summary style={{ cursor: "pointer", fontSize: 12.5, color: "var(--accent)" }}>
+            Show the exact text that was sent
+          </summary>
+          <pre style={{
+            marginTop: 8, padding: 11, background: "var(--sunken)",
+            border: "1px solid var(--line)", borderRadius: 6,
+            fontSize: 11.5, lineHeight: 1.5, overflowX: "auto",
+            whiteSpace: "pre-wrap", color: "var(--ink-2)", maxHeight: 340,
+          }}>{data.prompt_sent}</pre>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function Sources({ sources }) {
+  const on = sources.filter((s) => s.connected).length;
+  return (
+    <div className="panel">
+      <h2>Diagnostic sources &middot; {on} of {sources.length} connected</h2>
+      <div className="src-grid">
+        {sources.map((s) => (
+          <div className={"src-item" + (s.connected ? "" : " off")} key={s.id} title={s.checks}>
+            <span className={"dot " + (s.connected ? "on" : "off")} />
+            <span>{s.name}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+const SUGGESTS = [
+  "Which team owns this?",
+  "Why is confidence only Medium?",
+  "Have we seen this before?",
+  "What should I check next?",
+  "What should I not do?",
+];
+
+// The conversational layer. PROJECT answers only from allowlisted lookups
+// against this investigation; GENERAL answers from the model's own knowledge
+// and is told not to pass that off as evidence about this incident.
+function AskTheDiagnosis({ data }) {
+  const [mode, setMode] = useState("PROJECT");
+  const [turns, setTurns] = useState([]);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const send = useCallback((text) => {
+    const question = (text ?? q).trim();
+    if (!question || busy) return;
+    setBusy(true);
+    setQ("");
+    const history = turns.map((t) => ({
+      role: t.role, content: t.role === "user" ? t.text : t.text,
+    }));
+    setTurns((t) => [...t, { role: "user", text: question }]);
+
+    fetch("/api/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question, mode, history,
+        prediction_id: data ? data.prediction_id : null,
+      }),
+    })
+      .then((r) => r.ok ? r.json() : r.json().then((e) => Promise.reject(e)))
+      .then((a) => setTurns((t) => [...t, { role: "bot", text: a.answer, meta: a }]))
+      .catch((e) => setTurns((t) => [...t, {
+        role: "bot", text: e.detail || "That question could not be answered.", meta: null,
+      }]))
+      .finally(() => setBusy(false));
+  }, [q, mode, turns, busy, data]);
+
+  return (
+    <div className="panel">
+      <div className="ask-head">
+        <h2>Ask the Diagnosis</h2>
+        <div className="modes">
+          <button
+            type="button"
+            className={"project" + (mode === "PROJECT" ? " on" : "")}
+            onClick={() => setMode("PROJECT")}
+          >PROJECT</button>
+          <button
+            type="button"
+            className={"general" + (mode === "GENERAL" ? " on" : "")}
+            onClick={() => setMode("GENERAL")}
+          >GENERAL</button>
+        </div>
+        <span className="mode-help">
+          {mode === "PROJECT"
+            ? "Grounded — answers only from this investigation and the project config."
+            : "AI knowledge — general technical questions, not evidence about this incident."}
+        </span>
+      </div>
+
+      {turns.length === 0 && (
+        <div className="suggests">
+          {SUGGESTS.map((s) => (
+            <button type="button" className="chip" key={s} onClick={() => send(s)}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {turns.length > 0 && (
+        <div className="thread">
+          {turns.map((t, i) =>
+            t.role === "user" ? (
+              <div className="turn-user" key={i}>{t.text}</div>
+            ) : (
+              <div className="turn-bot" key={i}>
+                {t.meta && (
+                  <span className={"bot-badge " + (t.meta.mode === "GENERAL" ? "general" : "project")}>
+                    {t.meta.mode === "GENERAL" ? "GENERAL — AI KNOWLEDGE" : "PROJECT — GROUNDED"}
+                  </span>
+                )}
+                <div>{t.text}</div>
+                {t.meta && t.meta.sources && t.meta.sources.length > 0 && (
+                  <div className="prov">
+                    source: {[...new Set(t.meta.sources)].join(" · ")}
+                    <br />
+                    lookups: {t.meta.tools_used.join(", ")} (chosen by {t.meta.selector})
+                    {!t.meta.model_used && " · phrased without the model"}
+                  </div>
+                )}
+                {t.meta && t.meta.error && (
+                  <div className="prov" style={{ color: "var(--amber)" }}>
+                    model unavailable: {t.meta.error}
+                  </div>
+                )}
+              </div>
+            )
+          )}
+        </div>
+      )}
+
+      <div className="ask-row">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") send(); }}
+          placeholder={mode === "PROJECT"
+            ? "Ask about this investigation…"
+            : "Ask a general technical question…"}
+        />
+        <button type="button" onClick={() => send()} disabled={busy || !q.trim()}>
+          {busy ? "…" : "Ask"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// One line of counts, so the depth is discoverable without being on screen.
+function SummaryStrip({ data }) {
+  const sources = new Set(data.evidence.map((e) => e.source)).size;
+  const bits = [
+    `${data.evidence.length} observations from ${sources} sources`,
+    Object.keys(data.eliminated || {}).length
+      ? `${Object.keys(data.eliminated).length} layers ruled out`
+      : null,
+    data.precedents && data.precedents.length
+      ? `matches ${data.precedents[0].incident_id}`
+      : null,
+  ].filter(Boolean);
+  return <span className="strip-text">{bits.join(" · ")}</span>;
+}
+
+function Result({ data }) {
+  const c = data.confidence;
+  const [open, setOpen] = useState(false);
+  const rb = data.runbook || {};
+
+  return (
+    <div>
+      {data.parse_warnings && data.parse_warnings.map((w, i) => (
+        <div className="warn" key={i}>{w}</div>
+      ))}
+
+      {/* ---- the answer: what broke, how sure, what to do ---- */}
+      <div className={"panel verdict " + c.band}>
+        <div className="verdict-top">
+          <span className="verdict-layer">{data.layer_name}</span>
+          <span className={"band " + c.band}>{c.band}</span>
+          <span
+            className="score"
+            title="Computed by scorer.py from properties of the evidence. The model is never asked how confident it is."
+          >
+            <b>{Math.round(c.raw_score * 100)}%</b> evidence score
+            {c.capped && (
+              <span className="score-cap"> — would be {c.raw_band}, capped</span>
+            )}
+          </span>
+          {data.owner && <span className="owner">{data.owner}</span>}
+        </div>
+
+        <div className="narrative">
+          {data.narrative}
+          <span className="tag">
+            {data.narrative_source === "gemini" ? "written by model" : "template, no model"}
+          </span>
+        </div>
+
+        {rb.fix && (
+          <div className="do-this">
+            <span className="do-label">Do this</span>
+            {rb.fix}
+          </div>
+        )}
+
+        {rb.do_not && rb.do_not.length > 0 && (
+          <div className="not-this">
+            <span className="do-label not">Not this</span>
+            <ul className="clean">
+              {rb.do_not.map((d, i) => <li key={i}>{d}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {c.cap_reason && <div className="cap-note">{c.cap_reason}</div>}
+      </div>
+
+      {/* ---- the root cause, when there is a timing story to tell ---- */}
+      <TimingRuler timing={data.timing} />
+
+      {/* ---- ask questions about the finished diagnosis ---- */}
+      <AskTheDiagnosis data={data} />
+
+      {/* ---- everything else, out of the way until asked for ---- */}
+      <div className="working-bar" onClick={() => setOpen(!open)}>
+        <span className="working-toggle">{open ? "Hide" : "Show"} the working</span>
+        {!open && <SummaryStrip data={data} />}
+      </div>
+
+      {open && (
+        <div>
+          <Evidence evidence={data.evidence} />
+          <Eliminated eliminated={data.eliminated} />
+          <Precedents precedents={data.precedents} />
+          <Runbook runbook={data.runbook} runbookId={data.runbook_id} />
+          <ConfidenceBreakdown confidence={c} />
+          <SentToModel data={data} />
+          <Sources sources={data.sources} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function App() {
+  const [log, setLog] = useState("");
+  const [samples, setSamples] = useState([]);
+  const [allConnected, setAllConnected] = useState(false);
+  const [data, setData] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [health, setHealth] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/samples").then((r) => r.json()).then(setSamples).catch(() => {});
+    fetch("/api/health").then((r) => r.json()).then(setHealth).catch(() => {});
+  }, []);
+
+  const loadSample = useCallback((id) => {
+    fetch("/api/samples/" + id)
+      .then((r) => r.json())
+      .then((s) => { setLog(s.log); setData(null); setError(""); })
+      .catch(() => setError("Could not load sample."));
+  }, []);
+
+  const run = useCallback(() => {
+    if (!log.trim()) return;
+    setBusy(true); setError("");
+    fetch("/api/investigate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ log, all_sources_connected: allConnected }),
+    })
+      .then((r) => r.ok ? r.json() : r.json().then((e) => Promise.reject(e)))
+      .then(setData)
+      .catch((e) => setError(e.detail || "Investigation failed."))
+      .finally(() => setBusy(false));
+  }, [log, allConnected]);
+
+  // Re-run automatically when the coverage toggle flips, so the demo moment is
+  // one click: same log, same cause, different band.
+  useEffect(() => { if (data) run(); }, [allConnected]);
+
+  return (
+    <div>
+      <header>
+        <h1>AI Investigation Assistant</h1>
+        <span className="sub">
+          {health ? health.config_dir && "BulkSuppliers Supplier Sync" : ""}
+        </span>
+        <div className="spacer" />
+        {health && (
+          <span className="meta">
+            {health.rules} rules &middot; {health.incidents} incidents &middot;{" "}
+            {health.sources_connected}/{health.sources_total} sources &middot;{" "}
+            {health.ai_configured ? health.ai_model : "no model key — template summaries"}
+          </span>
+        )}
+      </header>
+
+      <div className="layout">
+        <div>
+          <div className="panel">
+            <h2>Log block</h2>
+            <div className="chips">
+              {samples.map((s) => (
+                <button
+                  type="button"
+                  className={"chip" + (s.id === "gateway_timeout" || s.id === "unrecognised" ? " hero" : "")}
+                  key={s.id}
+                  onClick={() => loadSample(s.id)}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={log}
+              onChange={(e) => setLog(e.target.value)}
+              placeholder="Paste the error block here, including the lines before it. The diagnosis usually lives before the error, not in it."
+            />
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={allConnected}
+                onChange={(e) => setAllConnected(e.target.checked)}
+              />
+              <span>
+                <div className="t-label">Simulate full deployment</div>
+                <div className="t-help">
+                  Only {health ? health.sources_connected : 3} of{" "}
+                  {health ? health.sources_total : 7} diagnostic sources are wired up
+                  today, so confidence is held at Medium however clean the evidence
+                  looks. Tick this to see what the same log would score with all{" "}
+                  {health ? health.sources_total : 7} connected. The root cause does not
+                  change &mdash; only the confidence band.
+                </div>
+              </span>
+            </label>
+            <button className="primary" onClick={run} disabled={busy || !log.trim()}>
+              {busy ? "Investigating…" : "Investigate"}
+            </button>
+            {error && <div className="err" style={{ marginTop: 12 }}>{error}</div>}
+          </div>
+        </div>
+
+        <div>
+          {data ? <Result data={data} /> : (
+            <div className="panel">
+              <div className="empty">
+                Paste a log block, or pick a sample.<br />
+                <span style={{ fontSize: 13 }}>
+                  Every decision below is made by deterministic Python.
+                  The model only writes the summary paragraph.
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

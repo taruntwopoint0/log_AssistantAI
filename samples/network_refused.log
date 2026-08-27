@@ -1,0 +1,10 @@
+2026-08-20 06:30:00.101 +05:30 [INF] BulkSuppliers worker cycle started
+2026-08-20 06:30:00.355 +05:30 [INF] Total Records Fetched for Supplier Details: 214
+2026-08-20 06:30:00.356 +05:30 [INF] Supplier Details synced started
+2026-08-20 06:30:01.912 +05:30 [ERR] Failed due to an issue in method "https://gateway.suppliersync.internal/api/bulkSuppliers/v1.0/api/supplier":
+System.Net.Http.HttpRequestException: An error occurred while sending the request.
+ ---> System.Net.Sockets.SocketException (10061): No connection could be made because the target machine actively refused it. 10.42.18.7:443
+   at System.Net.Sockets.Socket.AwaitableSocketAsyncEventArgs.ThrowException(SocketError error, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at SupplierSync.Api.FetchGalileoApi.GetAPIResponse(String url, String payload) in C:\src\SupplierSync\Api\FetchGalileoApi.cs:line 59
+2026-08-20 06:30:02.044 +05:30 [INF] Email Trigger sent

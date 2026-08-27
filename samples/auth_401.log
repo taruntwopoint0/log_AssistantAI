@@ -1,0 +1,8 @@
+2026-08-23 07:45:00.310 +05:30 [INF] BulkSuppliers worker cycle started
+2026-08-23 07:45:00.512 +05:30 [INF] Total Records Fetched for Supplier Details: 128
+2026-08-23 07:45:00.513 +05:30 [INF] Supplier Details synced started
+2026-08-23 07:45:01.884 +05:30 [ERR] Failed due to an issue in method "https://gateway.suppliersync.internal/api/bulkSuppliers/v1.0/api/supplier":
+System.Net.Http.HttpRequestException: Response status code does not indicate success: 401 (Unauthorized).
+   at System.Net.Http.HttpResponseMessage.EnsureSuccessStatusCode()
+   at SupplierSync.Api.FetchGalileoApi.GetAPIResponse(String url, String payload) in C:\src\SupplierSync\Api\FetchGalileoApi.cs:line 71
+2026-08-23 07:45:02.002 +05:30 [INF] Email Trigger sent

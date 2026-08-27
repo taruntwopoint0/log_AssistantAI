@@ -1,0 +1,7 @@
+2026-08-22 04:15:00.061 +05:30 [INF] BulkSuppliers worker cycle started
+2026-08-22 04:15:00.062 +05:30 [INF] Supplier Details synced started
+2026-08-22 04:15:30.774 +05:30 [ERR] Failed to fetch supplier details from Aldavar
+Microsoft.Data.SqlClient.SqlException (0x80131904): Timeout expired. The timeout period elapsed prior to obtaining a connection from the pool. This may have occurred because all pooled connections were in use and max pool size was reached.
+   at Microsoft.Data.SqlClient.SqlConnection.OnError(SqlException exception, Boolean breakConnection, Action`1 wrapCloseInAction)
+   at SupplierSync.Data.AldavarRepository.GetSupplierDetails() in C:\src\SupplierSync\Data\AldavarRepository.cs:line 44
+2026-08-22 04:15:30.900 +05:30 [INF] Email Trigger sent

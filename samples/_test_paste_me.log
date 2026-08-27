@@ -1,0 +1,14 @@
+06:12:44 INF BulkSuppliers worker cycle started
+06:12:44 INF Total Records Fetched for Supplier Contacts: 18
+06:12:44 INF Supplier Contacts synced started
+06:12:47 INF Supplier Contacts synced completed. Status: 200 OK
+06:31:09 INF Total Records Fetched for Supplier Details: 726
+06:31:09 INF Supplier Details synced started
+06:32:09 ERR Failed due to an issue in method "https://gateway.suppliersync.internal/api/bulkSuppliers/v1.0/api/supplier":
+System.Net.Http.HttpRequestException: An error occurred while sending the request.
+ ---> System.Net.Http.HttpIOException: The response ended prematurely. (ResponseEnded)
+   at System.Net.Http.HttpConnection.SendAsyncCore(HttpRequestMessage request, Boolean async, CancellationToken cancellationToken)
+   --- End of inner exception stack trace ---
+   at System.Net.Http.HttpClient.SendAsync(HttpRequestMessage request, HttpCompletionOption completionOption, CancellationToken cancellationToken)
+   at SupplierSync.Api.FetchGalileoApi.GetAPIResponse(String url, String payload) in C:\src\SupplierSync\Api\FetchGalileoApi.cs:line 59
+06:32:09 INF Email Trigger sent
