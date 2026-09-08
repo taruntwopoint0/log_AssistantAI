@@ -357,6 +357,50 @@ def get_limitations(ctx: DiagnosisContext) -> ToolResult:
                       source="current investigation")
 
 
+def get_log_quality(ctx: DiagnosisContext) -> ToolResult:
+    """How well the application logs, judged deterministically."""
+    q = ctx.inv.get("log_quality") or {}
+    if not q.get("total"):
+        return ToolResult("get_log_quality", ok=False, source="current investigation",
+                          note="No logging assessment was produced for this log.")
+    return ToolResult(
+        "get_log_quality", ok=True,
+        data={
+            "practices_present": q["passed"],
+            "practices_checked": q["total"],
+            "gaps": [
+                {"name": g["name"], "severity": g["severity"],
+                 "observed": g["observed"], "impact": g["impact"], "fix": g["fix"]}
+                for g in q.get("gaps", [])
+            ],
+            "already_good": [g["name"] for g in q.get("strengths", [])],
+        },
+        source="current investigation (log_quality.py)",
+    )
+
+
+def get_prevention(ctx: DiagnosisContext) -> ToolResult:
+    """What to change so this failure does not recur."""
+    pv = ctx.inv.get("prevention") or {}
+    items = pv.get("items") or []
+    if not items:
+        return ToolResult(
+            "get_prevention", ok=False, source="runbooks.json",
+            note=("No prevention guidance is recorded for this layer in "
+                  "runbooks.json."),
+        )
+    data = {"actions": items}
+    if pv.get("sizing"):
+        s = pv["sizing"]
+        data["recommended_batch_size"] = s["safe_batch_size"]
+        data["sizing_basis"] = s["basis"]
+    return ToolResult(
+        "get_prevention", ok=True, data=data,
+        source=f"runbooks.json ({ctx.inv.get('runbook_id')}.prevention)"
+               + (" + computed from measured throughput" if pv.get("sizing") else ""),
+    )
+
+
 TOOLS: dict[str, Callable[[DiagnosisContext], ToolResult]] = {
     "get_diagnosis": get_diagnosis,
     "get_owner": get_owner,
@@ -375,6 +419,8 @@ TOOLS: dict[str, Callable[[DiagnosisContext], ToolResult]] = {
     "get_timing": get_timing,
     "get_source_coverage": get_source_coverage,
     "get_limitations": get_limitations,
+    "get_log_quality": get_log_quality,
+    "get_prevention": get_prevention,
 }
 
 TOOL_DESCRIPTIONS: dict[str, str] = {
@@ -395,6 +441,8 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "get_timing": "elapsed time, projected time, ceilings and throughput rate",
     "get_source_coverage": "which diagnostic sources are connected and which are not",
     "get_limitations": "what this investigation could not establish",
+    "get_log_quality": "how well the application logs, and which logging practices are missing",
+    "get_prevention": "what developers should change so this failure does not happen again",
 }
 
 

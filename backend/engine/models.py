@@ -150,6 +150,12 @@ class Investigation:
     prompt_sent: str | None = None
     leak_check_passed: bool | None = None
 
+    # Developer-facing, and deliberately separate from the on-call answer.
+    # log_quality assesses how well the application logs; prevention says what
+    # to change so this failure does not recur. Both are fully deterministic.
+    log_quality: dict[str, Any] = field(default_factory=dict)
+    prevention: dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         # Dimension.contribution is a property, so asdict drops it.

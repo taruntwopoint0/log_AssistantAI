@@ -345,6 +345,38 @@
            text-transform: uppercase; letter-spacing: 0.05em; }
   .md tbody tr:last-child td { border-bottom: none; }
 
+  .dev-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .dev-head h2 { margin: 0; }
+  .dev-lead { font-size: 12.5px; color: var(--ink-2); margin-bottom: 14px; line-height: 1.55; }
+  .dev-empty { font-size: 13px; color: var(--ink-2); line-height: 1.6; }
+
+  .sizing {
+    padding: 2px 0 2px 12px; border-left: 2px solid var(--green);
+    margin-bottom: 14px; font-size: 13.5px;
+  }
+  .sizing b { font-family: var(--mono); font-weight: 600; }
+  .sizing-basis { font-size: 11.5px; color: var(--ink-3); font-family: var(--mono); margin-top: 4px; }
+
+  .gap { padding: 11px 0; border-bottom: 1px solid var(--line); }
+  .gap:last-of-type { border-bottom: none; }
+  .gap-head { display: flex; align-items: baseline; gap: 9px; margin-bottom: 5px; }
+  .gap-name { font-weight: 600; font-size: 13px; }
+  .sev {
+    font-size: 9.5px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; padding: 1px 6px; border-radius: var(--r);
+    border: 1px solid;
+  }
+  .sev.high   { color: var(--red);   border-color: #4e2f2b; background: #231816; }
+  .sev.medium { color: var(--amber); border-color: #4e4429; background: #221e15; }
+  .sev.low    { color: var(--ink-3); border-color: var(--line-mid); background: var(--sunken); }
+  .gap-line { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; margin-top: 3px; }
+  .gap-line em { color: var(--ink-3); font-style: normal; font-weight: 600; }
+  .gap-line.fix { color: var(--ink); }
+  .strengths {
+    margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line);
+    font-size: 12.5px; color: var(--ink-2);
+  }
+
   .ask-row { display: flex; gap: 7px; }
   .ask-row input {
     flex: 1; background: var(--sunken); color: var(--ink);
@@ -733,6 +765,91 @@ function renderMarkdown(src) {
     (m, n) => "<pre><code>" + blocks[Number(n)] + "</code></pre>");
 }
 
+// Developer-facing, and deliberately one panel rather than two. The on-call
+// engineer wants the fix; this is for whoever owns the code afterwards.
+// Everything here is computed deterministically - no model is involved in
+// deciding a finding, its impact, or the advice.
+function ForDevelopers({ data }) {
+  const [tab, setTab] = useState("prevent");
+  const q = data.log_quality || {};
+  const pv = data.prevention || {};
+  const gaps = q.gaps || [];
+  const strengths = q.strengths || [];
+  const items = pv.items || [];
+  const sizing = pv.sizing;
+  if (!items.length && !q.total) return null;
+
+  return (
+    <div className="panel">
+      <div className="dev-head">
+        <h2>For the developers</h2>
+        <div className="modes">
+          <button type="button" className={tab === "prevent" ? "on" : ""}
+                  onClick={() => setTab("prevent")}>PREVENT RECURRENCE</button>
+          <button type="button" className={tab === "logging" ? "on" : ""}
+                  onClick={() => setTab("logging")}>
+            LOGGING {q.total ? `${q.passed}/${q.total}` : ""}
+          </button>
+        </div>
+      </div>
+
+      {tab === "prevent" && (
+        items.length ? (
+          <div>
+            {sizing && (
+              <div className="sizing">
+                <span className="do-label">Recommended batch size</span>
+                <b>{sizing.safe_batch_size} records</b> per request.
+                <div className="sizing-basis">{sizing.basis}</div>
+              </div>
+            )}
+            <ul className="clean">
+              {items.map((it, i) => (
+                <li key={i}>
+                  <span className="src-tag">{it.area}</span>
+                  <span>{it.action}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div className="dev-empty">
+            No prevention guidance is recorded for this layer. Add a
+            <code> prevention </code> block to its runbook in
+            <code> config/runbooks.json</code>.
+          </div>
+        )
+      )}
+
+      {tab === "logging" && (
+        <div>
+          <div className="dev-lead">
+            {q.passed} of {q.total} logging practices present. Each gap below is
+            judged from this log alone, with what it cost this investigation.
+          </div>
+          {gaps.map((g) => (
+            <div className="gap" key={g.id}>
+              <div className="gap-head">
+                <span className={"sev " + g.severity}>{g.severity}</span>
+                <span className="gap-name">{g.name}</span>
+              </div>
+              <div className="gap-line"><em>Observed.</em> {g.observed}</div>
+              <div className="gap-line"><em>Cost here.</em> {g.impact}</div>
+              <div className="gap-line fix"><em>Fix.</em> {g.fix}</div>
+            </div>
+          ))}
+          {strengths.length > 0 && (
+            <div className="strengths">
+              <span className="do-label">Already doing well</span>
+              {strengths.map((x) => x.name).join(" · ")}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const SUGGESTS = [
   "Which team owns this?",
   "Why is confidence only Medium?",
@@ -933,6 +1050,7 @@ function Result({ data }) {
       <TimingRuler timing={data.timing} />
 
       {/* ---- ask questions about the finished diagnosis ---- */}
+      <ForDevelopers data={data} />
       <AskTheDiagnosis data={data} />
 
       {/* ---- everything else, out of the way until asked for ---- */}

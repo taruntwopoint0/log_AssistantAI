@@ -8,15 +8,36 @@
       "Ask the gateway team for the read/response timeout on the route, not just the connect timeout.",
       "Check for a proxy, WAF or load balancer between the worker and the host that nobody owns end to end."
     ],
-    "fix": "Chunk the request into batches that complete inside the ceiling. At the observed rate, 200 records finishes in roughly 36 seconds, leaving headroom under a 60 second cutoff. Chunking is inside our control and testable today; raising the gateway timeout needs another team and a change window.",
+    "fix": "Chunk the request into batches that complete inside the ceiling. The safe batch size is computed from the throughput measured in this log, so it stays correct as the rate changes. Chunking is inside our control and testable today; raising the gateway timeout needs another team and a change window.",
     "do_not": [
       "Do not raise the HttpClient timeout. The client is not the component cutting the connection.",
       "Do not retry the same oversized batch. It will fail at the same ceiling every time and multiply load.",
       "Do not escalate to the Galileo platform team. Galileo is answering small batches normally."
     ],
-    "escalate_to": "Network / API Gateway team, with the elapsed-time table attached"
+    "escalate_to": "Network / API Gateway team, with the elapsed-time table attached",
+    "prevention": [
+      {
+        "area": "code",
+        "action": "Chunk outbound batches so a single request completes well inside the smallest timeout on the path. Size the chunk from measured throughput, never from a guess."
+      },
+      {
+        "area": "code",
+        "action": "Make retry size-aware. A payload that failed because of its size will fail again at the same ceiling, and retrying it multiplies load on the component that is already cutting you off."
+      },
+      {
+        "area": "config",
+        "action": "Record the read timeout of every proxy, gateway and load balancer on this route in the service catalogue, with an owner. Nobody could name the 60s ceiling when this first happened."
+      },
+      {
+        "area": "monitoring",
+        "action": "Alert when elapsed time crosses a fraction of the known ceiling, not only when the call fails. This fault was visible as a trend for weeks before it started failing."
+      },
+      {
+        "area": "process",
+        "action": "Load-test at month-end volume, not average volume. A ceiling that only bites above a size threshold will never appear in a test that uses typical data."
+      }
+    ]
   },
-
   "RB-GALILEO-DOWN": {
     "title": "Galileo platform unavailable",
     "symptom": "All calls to Galileo fail regardless of batch size, typically with 502, 503 or a connect-level failure.",
@@ -30,9 +51,22 @@
       "Do not chunk the payload. Batch size is not the variable when every size fails.",
       "Do not restart the worker service. It will fail identically on the next cycle."
     ],
-    "escalate_to": "Galileo Platform team"
+    "escalate_to": "Galileo Platform team",
+    "prevention": [
+      {
+        "area": "code",
+        "action": "Fail fast and queue the batch for replay rather than retrying into an ongoing outage."
+      },
+      {
+        "area": "monitoring",
+        "action": "Subscribe to the platform status feed and correlate it with sync failures automatically, so an outage is identified rather than investigated."
+      },
+      {
+        "area": "process",
+        "action": "Agree a maintenance calendar with the platform team and pause the sync for its windows, so planned work does not page anyone."
+      }
+    ]
   },
-
   "RB-NETWORK": {
     "title": "Network path failure to a dependency",
     "symptom": "Connection refused, no such host, or connect timeout. The failure happens before any response bytes arrive.",
@@ -47,9 +81,22 @@
       "Do not chunk the payload. The request is not being sent at all.",
       "Do not investigate application code paths until the host resolves and connects."
     ],
-    "escalate_to": "Infrastructure / Network team"
+    "escalate_to": "Infrastructure / Network team",
+    "prevention": [
+      {
+        "area": "config",
+        "action": "Keep the egress rules for the worker subnet under change control with a named owner."
+      },
+      {
+        "area": "monitoring",
+        "action": "Run a synthetic DNS and TCP check to each dependency from the worker host itself. A check from a jump box proves nothing about the worker's path."
+      },
+      {
+        "area": "process",
+        "action": "Add this worker's egress path to the firewall change review checklist, so a rule change cannot silently remove it."
+      }
+    ]
   },
-
   "RB-SERVICE-CRASH": {
     "title": "Worker service stopped or crash-looping",
     "symptom": "The service is not running, or the log ends abruptly with an unhandled exception and a restart.",
@@ -64,9 +111,26 @@
       "Do not restart repeatedly without capturing the exception. Each restart discards the evidence.",
       "Do not assume a downstream problem until the worker survives one clean cycle."
     ],
-    "escalate_to": "ALD Automotive Integration"
+    "escalate_to": "ALD Automotive Integration",
+    "prevention": [
+      {
+        "area": "code",
+        "action": "Treat every field arriving from an upstream system as optional. Guard the mapping path rather than trusting the contract."
+      },
+      {
+        "area": "code",
+        "action": "Catch per record, not per cycle. One malformed record should fail one record, not take down the whole run."
+      },
+      {
+        "area": "config",
+        "action": "Move the service account to a managed identity or a non-expiring principal so an expiry cannot stop the worker overnight."
+      },
+      {
+        "area": "monitoring",
+        "action": "Alert on the service's state, not only on log errors. A stopped service writes nothing, so log-based alerting is silent exactly when it matters."
+      }
+    ]
   },
-
   "RB-ALDAVAR-DB": {
     "title": "Aldavar database unreachable",
     "symptom": "SQL exception on connect, login failure, or connection pool exhaustion before any records are fetched.",
@@ -81,9 +145,26 @@
       "Do not raise Max Pool Size as a first move. It hides a leak rather than fixing it.",
       "Do not investigate Galileo. The sync never got as far as calling it."
     ],
-    "escalate_to": "Database Services"
+    "escalate_to": "Database Services",
+    "prevention": [
+      {
+        "area": "code",
+        "action": "Audit the retry path for undisposed connections. Pool exhaustion is almost always a leak rather than a sizing problem."
+      },
+      {
+        "area": "config",
+        "action": "Set the connection timeout shorter than the job's own budget, so a pool problem fails quickly and legibly instead of hanging."
+      },
+      {
+        "area": "monitoring",
+        "action": "Track pool utilisation as a metric, not just connection failures. Utilisation warns; failures only report."
+      },
+      {
+        "area": "process",
+        "action": "Take a run lock so two cycles cannot overlap, or stagger the schedule so they never can."
+      }
+    ]
   },
-
   "RB-DB-VIEWS": {
     "title": "Source view empty or stale",
     "symptom": "The sync completes without error but fetches zero records, or a count far below the expected range.",
@@ -97,9 +178,22 @@
       "Do not treat a clean exit as success. Zero records is a failure that did not throw.",
       "Do not re-run the sync until the view is repopulated."
     ],
-    "escalate_to": "Database Services"
+    "escalate_to": "Database Services",
+    "prevention": [
+      {
+        "area": "code",
+        "action": "Treat a zero-row fetch as a failure condition, not a clean exit. A silent success is the hardest failure to notice."
+      },
+      {
+        "area": "monitoring",
+        "action": "Alert when the record count falls outside its normal range in either direction. Zero rows went unnoticed for two days."
+      },
+      {
+        "area": "process",
+        "action": "Have the upstream feed publish a completion marker the sync can check before it starts."
+      }
+    ]
   },
-
   "RB-AUTH-401": {
     "title": "Credential or token rejection",
     "symptom": "401 or 403 from the endpoint, usually immediately and regardless of batch size.",
@@ -113,9 +207,26 @@
       "Do not retry with backoff. A rejected credential does not become valid on retry.",
       "Do not chunk the payload. Size is irrelevant when the request is refused at the door."
     ],
-    "escalate_to": "ALD Automotive Integration"
+    "escalate_to": "ALD Automotive Integration",
+    "prevention": [
+      {
+        "area": "config",
+        "action": "Move to a managed identity or a certificate with automated rotation, so a credential cannot silently reach its expiry."
+      },
+      {
+        "area": "monitoring",
+        "action": "Alert thirty days before any secret or certificate expires, and own that alert."
+      },
+      {
+        "area": "code",
+        "action": "Handle 401 and 403 differently. One is a credential problem, the other is a scope or permission problem, and they need different responses."
+      },
+      {
+        "area": "process",
+        "action": "Record every credential's expiry date and owner in one place."
+      }
+    ]
   },
-
   "RB-HEALTHY": {
     "title": "No failure detected",
     "symptom": "The run completed and every batch returned successfully.",
@@ -127,9 +238,18 @@
     "do_not": [
       "Do not treat a healthy run as proof that a recent change is safe. One clean cycle is one data point."
     ],
-    "escalate_to": null
+    "escalate_to": null,
+    "prevention": [
+      {
+        "area": "monitoring",
+        "action": "Alert on the absence of the completion line, not only on errors. A worker that never starts produces no error to alert on."
+      },
+      {
+        "area": "process",
+        "action": "Treat one clean cycle as one data point. Watch the trend in duration and record count rather than the last run."
+      }
+    ]
   },
-
   "RB-UNKNOWN": {
     "title": "Not recognised",
     "symptom": "The evidence in this log does not match any rule currently configured.",
@@ -142,6 +262,16 @@
     "do_not": [
       "Do not act on the closest-looking runbook. A near miss on a diagnosis is worse than no diagnosis."
     ],
-    "escalate_to": "ALD Automotive Integration"
+    "escalate_to": "ALD Automotive Integration",
+    "prevention": [
+      {
+        "area": "process",
+        "action": "Once the true cause is known, add a rule to config/rules.json so the next occurrence is recognised automatically."
+      },
+      {
+        "area": "code",
+        "action": "Check whether the failing path logs enough to classify it at all. The logging findings on this investigation are the place to start."
+      }
+    ]
   }
 }

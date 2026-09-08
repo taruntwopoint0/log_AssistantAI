@@ -166,6 +166,12 @@ _KEYWORD_ROUTES: list[tuple[tuple[str, ...], list[str]]] = [
     (("relationship", "graph", "connect", "topology", "map"),
      ["get_incident_relationships", "get_dependencies"]),
     (("runbook", "procedure", "playbook"), ["get_runbook"]),
+    (("prevent", "happen again", "recur", "avoid this", "stop this", "long term",
+      "permanent fix", "root fix", "so it doesn't", "future"),
+     ["get_prevention", "get_runbook"]),
+    (("log quality", "logging", "log better", "instrument", "observability",
+      "correlation id", "structured log", "what should we log"),
+     ["get_log_quality", "get_prevention"]),
 ]
 
 _DEFAULT_TOOLS = ["get_diagnosis", "get_evidence", "get_confidence_explanation"]

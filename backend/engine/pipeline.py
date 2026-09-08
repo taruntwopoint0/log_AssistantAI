@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import knowledge, precedent, rules_engine, scorer, writer
+from . import knowledge, log_quality, precedent, prevention, rules_engine, scorer, writer
 from .models import Investigation
 from .parser import parse
 
@@ -61,6 +61,10 @@ def investigate(
         sources=sources,
     )
 
+    # -- developer-facing, deterministic ------------------------------------
+    quality = log_quality.assess(parsed, parsed.facts)
+    prevent = prevention.build(runbook, parsed.facts)
+
     investigation = Investigation(
         layer=layer,
         layer_name=info.get("name", layer),
@@ -76,6 +80,8 @@ def investigate(
         timing=_timing(parsed, topology),
         sources=sources,
         parse_warnings=parsed.warnings,
+        log_quality=quality.to_dict(),
+        prevention=prevent.to_dict(),
     )
 
     # -- stage 7: prose (the only AI) ---------------------------------------
