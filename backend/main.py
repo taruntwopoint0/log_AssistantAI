@@ -23,7 +23,7 @@ from engine import knowledge, query_assistant
 from engine.graph import attach_investigation, build_static_graph
 from engine.pipeline import investigate
 from engine.query_tools import DiagnosisContext
-from gen_mock_logs import LABELS, SCENARIOS
+from gen_mock_logs import LABELS, SCENARIOS, visible_samples
 
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
@@ -286,9 +286,11 @@ def api_graph(prediction_id: str):
 
 @app.get("/api/samples")
 def api_samples():
+    # HIDDEN_SAMPLES are still loadable by id via /api/samples/{name} and still
+    # covered by the tests; they are just not offered as one-click chips.
     return [
-        {"id": name, "label": LABELS.get(name, name), "chars": len(text)}
-        for name, text in SCENARIOS.items()
+        {"id": name, "label": label, "chars": len(SCENARIOS[name])}
+        for name, label in visible_samples().items()
     ]
 
 

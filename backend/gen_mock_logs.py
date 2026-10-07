@@ -162,7 +162,7 @@ EXPECTED: dict[str, dict[str, str]] = {
 
 
 LABELS: dict[str, str] = {
-    "gateway_timeout": "Gateway timeout (the production case)",
+    "gateway_timeout": "Gateway timeout",
     "galileo_down": "Galileo unavailable",
     "network_refused": "Network refused",
     "service_crash": "Worker service crash",
@@ -171,6 +171,16 @@ LABELS: dict[str, str] = {
     "healthy_run": "Healthy run",
     "unrecognised": "Unrecognised (declines to guess)",
 }
+
+# Samples hidden from the dashboard's one-click list. They remain in SCENARIOS
+# so the engine behaviour stays covered by the test suite - only the chip is
+# gone, and removing a name here brings it back.
+HIDDEN_SAMPLES: set[str] = {"unrecognised"}
+
+
+def visible_samples() -> dict[str, str]:
+    """Name -> label, for the samples the dashboard offers."""
+    return {k: LABELS.get(k, k) for k in SCENARIOS if k not in HIDDEN_SAMPLES}
 
 
 def main() -> None:

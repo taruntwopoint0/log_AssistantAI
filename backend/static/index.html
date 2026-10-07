@@ -1046,9 +1046,6 @@ function Result({ data }) {
         {c.cap_reason && <div className="cap-note">{c.cap_reason}</div>}
       </div>
 
-      {/* ---- the root cause, when there is a timing story to tell ---- */}
-      <TimingRuler timing={data.timing} />
-
       {/* ---- ask questions about the finished diagnosis ---- */}
       <ForDevelopers data={data} />
       <AskTheDiagnosis data={data} />
@@ -1121,13 +1118,6 @@ function App() {
           {health ? health.config_dir && "BulkSuppliers Supplier Sync" : ""}
         </span>
         <div className="spacer" />
-        {health && (
-          <span className="meta">
-            {health.rules} rules &middot; {health.incidents} incidents &middot;{" "}
-            {health.sources_connected}/{health.sources_total} sources &middot;{" "}
-            {health.ai_configured ? health.ai_model : "no model key — template summaries"}
-          </span>
-        )}
       </header>
 
       <div className="layout">
@@ -1180,11 +1170,7 @@ function App() {
           {data ? <Result data={data} /> : (
             <div className="panel">
               <div className="empty">
-                Paste a log block, or pick a sample.<br />
-                <span style={{ fontSize: 13 }}>
-                  Every decision below is made by deterministic Python.
-                  The model only writes the summary paragraph.
-                </span>
+                Paste a log block, or pick a sample.
               </div>
             </div>
           )}
