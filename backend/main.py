@@ -55,6 +55,29 @@ def _load_dotenv(path: Path = BASE_DIR / ".env") -> None:
 
 _load_dotenv()
 
+
+def _trust_os_certificates() -> None:
+    """Verify TLS against the operating system's certificate store.
+
+    google-genai talks over httpx, which trusts certifi's bundle and nothing
+    else. On any network that inspects TLS - which is every corporate and bank
+    network - the proxy presents a certificate signed by an internal root that
+    Windows trusts and certifi does not, so every model call dies with
+    CERTIFICATE_VERIFY_FAILED while a browser on the same machine is fine.
+
+    truststore makes Python use the OS store instead, so the internal root is
+    accepted without disabling verification. Optional: if it is not installed
+    the tool still runs, and stages 1-6 never needed the network anyway.
+    """
+    try:
+        import truststore
+        truststore.inject_into_ssl()
+    except Exception:
+        pass
+
+
+_trust_os_certificates()
+
 app = FastAPI(
     title="AI Investigation Assistant",
     description=(
@@ -242,15 +265,19 @@ def api_ask(req: AskRequest):
     """Ask the Diagnosis.
 
     PROJECT mode answers only from allowlisted lookups against this
-    investigation and the project config. GENERAL mode answers ordinary
-    technical questions from the model's own knowledge and is told not to
-    present that as evidence about this incident.
+    investigation and the project config - it may not go beyond them.
+
+    GENERAL mode receives the same investigation as context and answers with
+    the model's own technical knowledge on top of it, required to mark anything
+    it adds as suggestion rather than finding. Same data, different licence.
 
     The model never decides the root cause, the band, the evidence or the
     eliminations. It selects a lookup; the backend runs it.
     """
     mode = (req.mode or "PROJECT").upper()
-    ctx = _context_for(req.prediction_id) if mode == "PROJECT" else None
+    # Both modes now get the investigation. PROJECT may use nothing else;
+    # GENERAL uses it as context and may reason beyond it, saying so when it does.
+    ctx = _context_for(req.prediction_id)
 
     if mode == "PROJECT" and ctx is None:
         raise HTTPException(

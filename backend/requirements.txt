@@ -8,5 +8,9 @@ uvicorn[standard]>=0.52.4
 # deprecated, and do not use the gemini-1.5-* or gemini-2.0-* model ids.
 google-genai>=1.0.0
 
+# Verify TLS against the OS certificate store, so the model is reachable from
+# networks that inspect TLS (every corporate and bank network does).
+truststore>=0.10.0
+
 # Tests
 pytest>=9.1.1

@@ -233,18 +233,82 @@ def test_internal_identifiers_are_withheld_from_the_chat_prompt(gateway, monkeyp
     assert "gateway.suppliersync.internal" not in captured[-1]
 
 
-def test_general_mode_is_given_no_project_facts(gateway, monkeypatch):
+def test_general_mode_receives_the_incident_as_context(gateway, monkeypatch):
+    """GENERAL reasons around the incident, so it is given the conclusion.
+
+    This is the difference from PROJECT, and it is licence rather than data:
+    PROJECT may not go beyond the facts; GENERAL may, and must say when it does.
+    """
     monkeypatch.setenv("GEMINI_API_KEY", "fake")
     captured: list[str] = []
     monkeypatch.setattr(qa, "_call_model",
                         lambda p, k, max_tokens=2000: captured.append(p) or "ok")
-    a = qa.ask("What is an HTTP 504?", "GENERAL", gateway)
+    a = qa.ask("How do I fix a 60 second timeout?", "GENERAL", gateway)
 
     prompt = captured[-1]
-    assert "GatewayTimeout" not in prompt
-    assert "VERIFIED FACTS" not in prompt
+    assert "INCIDENT CONTEXT" in prompt
+    assert "Intermediary timeout on large payloads" in prompt
+    assert "SUMMARY AS SHOWN TO THE ENGINEER" in prompt
+    # still not grounded: it is allowed to go beyond the facts
     assert a.grounded is False
     assert a.tools_used == []
+
+
+def test_general_mode_is_told_to_mark_its_own_speculation(gateway, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    captured: list[str] = []
+    monkeypatch.setattr(qa, "_call_model",
+                        lambda p, k, max_tokens=2000: captured.append(p) or "ok")
+    qa.ask("What else could cause this?", "GENERAL", gateway)
+    prompt = captured[-1].lower()
+    assert "suggestion, not a finding" in prompt
+    assert "never contradict it" in prompt
+
+
+def test_general_mode_still_never_sees_the_raw_log(gateway, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    captured: list[str] = []
+    monkeypatch.setattr(qa, "_call_model",
+                        lambda p, k, max_tokens=2000: captured.append(p) or "ok")
+    qa.ask("Explain this failure", "GENERAL", gateway)
+    prompt = captured[-1]
+    assert "FetchGalileoApi.cs" not in prompt
+    assert "--- End of inner exception stack trace ---" not in prompt
+    assert gateway.inv["facts"]["error_text"] not in prompt
+
+
+def test_general_mode_redacts_identifiers_too(gateway, monkeypatch):
+    """Adding context must not make this mode leakier than PROJECT."""
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    captured: list[str] = []
+    monkeypatch.setattr(qa, "_call_model",
+                        lambda p, k, max_tokens=2000: captured.append(p) or "ok")
+    a = qa.ask("What should I check?", "GENERAL", gateway)
+    assert "gateway.suppliersync.internal" not in captured[-1]
+    assert a.redactions
+
+
+def test_general_mode_without_an_investigation_falls_back(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    captured: list[str] = []
+    monkeypatch.setattr(qa, "_call_model",
+                        lambda p, k, max_tokens=2000: captured.append(p) or "ok")
+    qa.ask("What is an HTTP 504?", "GENERAL", None)
+    assert "INCIDENT CONTEXT" not in captured[-1]
+    assert "No incident investigation is open" in captured[-1]
+
+
+def test_general_mode_helps_even_when_the_engine_declined(unknown, monkeypatch):
+    """A new, unrecognised failure is exactly when this mode earns its place."""
+    monkeypatch.setenv("GEMINI_API_KEY", "fake")
+    captured: list[str] = []
+    monkeypatch.setattr(qa, "_call_model",
+                        lambda p, k, max_tokens=2000: captured.append(p) or "ok")
+    qa.ask("What could this be?", "GENERAL", unknown)
+    prompt = captured[-1]
+    assert "NOT DETERMINED" in prompt
+    assert "EVIDENCE EXTRACTED FROM THE LOG" in prompt
+    assert "help anyway" in prompt
 
 
 def test_a_model_failure_degrades_to_verified_facts(gateway, monkeypatch):

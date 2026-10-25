@@ -68,29 +68,43 @@ Rules, in order of importance:
    a withheld identifier. Reproduce it character for character. Never expand or guess it.
 """
 
-GENERAL_RULES = """You are a knowledgeable technical assistant helping a bank infrastructure
-engineer. Answer from your own knowledge, properly and in full.
+GENERAL_RULES = """You are a technical assistant helping a bank infrastructure engineer
+work through a live incident.
+
+An incident investigation is open and its findings are given below. Use them as the
+subject of the conversation: answer general technical questions, but answer them about
+THIS failure rather than in the abstract. If the engineer asks "how do I fix a 60s
+timeout", they mean the one in front of them.
 
 Be genuinely useful:
-- Answer the actual question. Give the detail the question deserves - a quick factual
-  question gets a short answer, a "how does X work" question gets a real explanation.
-- Use markdown freely where it helps: headings, bullet lists, numbered steps, tables,
-  and fenced code blocks for commands, config or code.
+- Answer the actual question, at the depth it deserves.
+- Use markdown freely: headings, bullets, numbered steps, tables, fenced code blocks.
 - Be concrete. Name real tools, real defaults, real config keys, real commands.
-- Follow up naturally across turns; the conversation history is yours to use.
+- Reason from the incident facts. You may go beyond them using your own technical
+  knowledge - that is the point of this mode.
+- Follow up naturally across turns; the history is yours to use.
 
-One boundary, and it is about honesty rather than refusal. This chat sits beside a
-specific incident investigation whose findings you have NOT been given. So:
-- Answer general and background questions fully and helpfully, always.
-- Only when asked to confirm something about THIS specific incident - what caused it,
-  what its evidence shows, whether some general fact proves it - note in your own words
-  that you have not been given this investigation's findings, suggest PROJECT mode for
-  that, and then still answer the general part of the question as helpfully as you can.
-  Write that as a natural sentence; do not copy this instruction's wording.
-- Never invent details about the current incident.
+One rule about honesty, and it matters:
+- The INCIDENT CONTEXT below was established by deterministic analysis. Treat it as
+  fact and never contradict it.
+- Anything you add from your own knowledge is a suggestion, not a finding. Where you
+  are speculating, inferring or listing possibilities, say so in plain words -
+  "likely", "worth checking", "I cannot confirm this from the investigation".
+- Never invent a specific detail about this system: no hostnames, team names, config
+  values, version numbers or past incidents that are not in the context below.
+- Any all-caps placeholder in angle brackets, like <EXAMPLE_1>, is a withheld
+  identifier. Reproduce it exactly; never expand or guess it.
 
-Do not deflect questions you can answer. Do not add disclaimers to ordinary technical
-answers.
+If the investigation reached no conclusion, say so, then help anyway: work from the
+evidence that was extracted and suggest what to check, clearly marked as suggestion.
+"""
+
+
+NO_CONTEXT_RULES = """You are a technical assistant helping a bank infrastructure engineer.
+
+No incident investigation is open, so answer from your own technical knowledge. Be
+accurate and concrete, and use markdown where it helps. Do not invent details about
+any specific system.
 """
 
 SELECTOR_RULES = """Choose which lookups will answer the user's question.
@@ -352,26 +366,48 @@ def ask(
                       mode=mode, grounded=(mode == "PROJECT"), selector="n/a")
 
     if mode == "GENERAL":
-        return _answer_general(question, history, api_key)
+        return _answer_general(question, history, api_key, ctx)
     return _answer_project(question, ctx, history, api_key)
 
 
 def _answer_general(question: str, history: list[dict[str, str]],
-                    api_key: str | None) -> Answer:
+                    api_key: str | None,
+                    ctx: DiagnosisContext | None = None) -> Answer:
     if not api_key:
         return Answer(
             answer=("General mode needs a model, and no GEMINI_API_KEY is configured. "
                     "PROJECT mode still works without one."),
             mode="GENERAL", grounded=False, selector="n/a",
         )
-    prompt = (GENERAL_RULES + "\n" + _render_history(history, GENERAL_HISTORY_TURNS)
-              + f"\nQuestion: {question}\n\nAnswer:")
+    brief = _incident_brief(ctx)
+    rules = GENERAL_RULES if brief else NO_CONTEXT_RULES
+    raw_prompt = (rules + "\n" + brief + _render_history(history, GENERAL_HISTORY_TURNS)
+                  + f"\nQuestion: {question}\n\nAnswer:")
+
+    # Same containment as PROJECT mode and writer.py: internal identifiers are
+    # tokenised on the way out and restored on the way back. The context makes
+    # this mode more useful, so it must not make it leakier.
+    redactor = Redactor.from_payload(
+        {"runbook": (ctx.inv.get("runbook") if ctx else None),
+         "precedents": (ctx.inv.get("precedents") if ctx else None)},
+        ctx.topology if ctx else {}, scan_text=raw_prompt,
+    )
+    prompt = redactor.redact(raw_prompt)
+    if redactor.leaked(prompt):
+        return Answer(
+            answer=("An internal identifier could not be masked, so the question was "
+                    "not sent. Ask it in PROJECT mode instead."),
+            mode="GENERAL", grounded=False, selector="n/a",
+            error="leak check failed",
+        )
+
     try:
         # Deliberately NOT _sanitise(): that strips headings, bullets, bold and
         # code fences, which is right for PROJECT's terse grounded prose and
         # wrong for a general assistant. The dashboard renders this as markdown,
         # escaping HTML first so model output can never become live markup.
-        text = _call_model(prompt, api_key, max_tokens=GENERAL_MAX_TOKENS).strip()
+        text = redactor.restore(
+            _call_model(prompt, api_key, max_tokens=GENERAL_MAX_TOKENS).strip())
     except Exception as exc:
         return Answer(
             answer=("The model is unavailable right now. PROJECT mode still works "
@@ -379,9 +415,67 @@ def _answer_general(question: str, history: list[dict[str, str]],
             mode="GENERAL", grounded=False, selector="n/a",
             error=f"{type(exc).__name__}: {exc}"[:300],
         )
-    return Answer(answer=text or "No answer was produced.", mode="GENERAL",
-                  grounded=False, model_used=True, selector="n/a",
-                  sources=["model general knowledge"])
+    return Answer(
+        answer=text or "No answer was produced.", mode="GENERAL",
+        grounded=False, model_used=True, selector="n/a",
+        sources=["this investigation (as context)", "model general knowledge"]
+                if brief else ["model general knowledge"],
+        redactions=redactor.as_dicts(),
+    )
+
+
+def _incident_brief(ctx: DiagnosisContext | None) -> str:
+    """A compact statement of what the engine concluded, for GENERAL mode.
+
+    GENERAL exists so an engineer can reason around the incident with the
+    model's own knowledge. Without the incident in front of it that reasoning
+    is generic and nearly useless, so the conclusion is supplied as context.
+
+    What separates this from PROJECT mode is not the data but the licence: here
+    the model may go beyond the facts, and is required to say when it does.
+    PROJECT mode may not go beyond them at all.
+    """
+    if ctx is None:
+        return ""
+
+    inv = ctx.inv
+    c = inv.get("confidence") or {}
+    lines = ["INCIDENT CONTEXT — established by deterministic analysis, treat as fact",
+             f"System: {ctx.topology.get('system', 'unknown')}"]
+
+    if ctx.diagnosed:
+        lines.append(f"Cause: {inv.get('layer_name')} [{inv.get('layer')}]")
+        if inv.get("owner"):
+            lines.append(f"Owning team: {inv['owner']}")
+    else:
+        lines.append("Cause: NOT DETERMINED. The evidence matched no configured rule, "
+                     "so the engine declined to name a cause.")
+    lines.append(f"Confidence: {c.get('band')}")
+    if c.get("cap_reason"):
+        lines.append(f"Why the band is limited: {c['cap_reason']}")
+
+    if inv.get("narrative"):
+        lines += ["", "SUMMARY AS SHOWN TO THE ENGINEER:", inv["narrative"]]
+
+    ev = inv.get("evidence") or []
+    if ev:
+        lines += ["", "EVIDENCE EXTRACTED FROM THE LOG:"]
+        lines += [f"- {e['summary']}" for e in ev[:14]]
+
+    t = inv.get("timing") or {}
+    if t.get("elapsed_seconds") is not None:
+        lines += ["", "TIMING: "
+                  f"{t.get('record_count')} records, cut after {t['elapsed_seconds']:.0f}s"
+                  + (f", would have needed about {t['projected_seconds']:.0f}s"
+                     if t.get("projected_seconds") else "")]
+
+    rb = inv.get("runbook") or {}
+    if rb.get("fix"):
+        lines += ["", f"PRESCRIBED FIX: {rb['fix']}"]
+    if rb.get("do_not"):
+        lines.append("MUST NOT DO: " + " ".join(rb["do_not"]))
+
+    return "\n".join(lines) + "\n"
 
 
 def _answer_project(question: str, ctx: DiagnosisContext | None,

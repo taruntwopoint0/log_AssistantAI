@@ -85,6 +85,11 @@ class Redactor:
 
         blob = json.dumps(payload, default=str)
         target = blob if scan_text is None else scan_text
+        # Candidates are searched for in BOTH the payload and the outbound text.
+        # Searching only the payload was a real leak: a hostname present in the
+        # prompt but absent from the payload passed through unmasked. Inclusion
+        # is still gated on `target`, so the map stays limited to what is sent.
+        haystack = blob + "\n" + target
         found: list[tuple[str, str]] = []      # (kind, value)
 
         if cfg.get("redact_hosts", True):
@@ -92,20 +97,20 @@ class Redactor:
                 s.lower() for s in cfg.get("internal_domain_suffixes", [])
             )
             hosts = set(topology.get("hosts") or {})
-            for m in FQDN_RE.finditer(blob):
+            for m in FQDN_RE.finditer(haystack):
                 host = m.group(0)
                 if suffixes and host.lower().endswith(suffixes):
                     hosts.add(host)
             for host in hosts:
-                if host in blob:
+                if host in haystack:
                     found.append(("host", host))
 
         if cfg.get("redact_ips", True):
-            for ip in dict.fromkeys(IP_RE.findall(blob)):
+            for ip in dict.fromkeys(IP_RE.findall(haystack)):
                 found.append(("ip", ip))
 
         if cfg.get("redact_incident_ids", True):
-            for inc in dict.fromkeys(INCIDENT_RE.findall(blob)):
+            for inc in dict.fromkeys(INCIDENT_RE.findall(haystack)):
                 found.append(("incident", inc))
 
         if cfg.get("redact_owners", True):
@@ -119,7 +124,7 @@ class Redactor:
                 if p.get("resolved_by"):
                     owners.add(p["resolved_by"])
             for owner in owners:
-                if owner and owner in blob:
+                if owner and owner in haystack:
                     found.append(("team", owner))
 
         # Longest values first so a suffix never eats part of a longer match.

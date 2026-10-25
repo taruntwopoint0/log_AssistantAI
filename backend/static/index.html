@@ -51,12 +51,22 @@
 
   /* ---------- masthead ---------- */
   header {
-    background: var(--surface); border-bottom: 1px solid var(--line-mid);
-    padding: 14px 28px; display: flex; align-items: baseline; gap: 14px;
+    background: linear-gradient(180deg, #1d2128 0%, var(--surface) 100%);
+    border-bottom: 1px solid var(--line-mid);
+    padding: 16px 28px 15px; display: flex; align-items: baseline; gap: 14px;
     flex-wrap: wrap;
   }
   header h1 {
-    font-size: 15px; margin: 0; font-weight: 600; letter-spacing: -0.005em;
+    font-size: 16px; margin: 0; font-weight: 640; letter-spacing: -0.01em;
+  }
+  .live {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px;
+    font-weight: 650; letter-spacing: 0.08em; color: var(--green);
+    text-transform: uppercase;
+  }
+  .live i {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--green);
+    display: inline-block;
   }
   header .sub {
     font-size: 13px; color: var(--ink-2);
@@ -75,7 +85,8 @@
 
   .panel {
     background: var(--surface); border: 1px solid var(--line);
-    border-radius: var(--r); padding: 16px 18px; margin-bottom: 14px;
+    border-radius: 5px; padding: 17px 19px; margin-bottom: 14px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.22);
   }
   .panel h2 {
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em;
@@ -120,7 +131,7 @@
   .toggle .t-help { font-size: 12px; color: var(--ink-2); margin-top: 2px; line-height: 1.5; }
 
   /* ---------- verdict ---------- */
-  .verdict { border-left: 2px solid var(--ink-3); }
+  .verdict { border-left: 3px solid var(--ink-3); padding-top: 19px; }
   .verdict.High         { border-left-color: var(--green); }
   .verdict.Medium       { border-left-color: var(--amber); }
   .verdict.Inconclusive { border-left-color: var(--ink-3); }
@@ -129,7 +140,9 @@
     display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
     padding-bottom: 12px; border-bottom: 1px solid var(--line);
   }
-  .verdict-layer { font-size: 19px; font-weight: 600; letter-spacing: -0.012em; }
+  .verdict-layer {
+    font-size: 23px; font-weight: 650; letter-spacing: -0.018em; line-height: 1.2;
+  }
 
   .band {
     padding: 2px 8px; border-radius: var(--r); font-size: 10.5px; font-weight: 700;
@@ -144,7 +157,7 @@
   .score-cap { color: var(--amber); }
   .owner { color: var(--ink-2); font-size: 13px; margin-left: auto; }
 
-  .narrative { margin-top: 13px; line-height: 1.65; color: var(--ink); }
+  .narrative { margin-top: 14px; line-height: 1.68; color: var(--ink); font-size: 14.5px; }
   .tag {
     display: inline-block; font-family: var(--mono); font-size: 10px;
     padding: 0 5px; border: 1px solid var(--line-mid); border-radius: var(--r);
@@ -272,7 +285,7 @@
     padding: 10px 12px; border: 1px solid var(--line-mid); border-left: 2px solid var(--red);
     border-radius: var(--r); background: var(--surface); color: var(--ink); font-size: 13px;
   }
-  .empty { color: var(--ink-3); text-align: center; padding: 56px 20px; font-size: 13.5px; line-height: 1.7; }
+  .empty { color: var(--ink-3); text-align: center; padding: 74px 20px; font-size: 14.5px; line-height: 1.7; }
 
   /* ---------- working disclosure ---------- */
   .working-bar {
@@ -289,10 +302,11 @@
   .ask-head h2 { margin: 0; }
   .modes { display: flex; border: 1px solid var(--line-mid); border-radius: var(--r); overflow: hidden; }
   .modes button {
-    border: none; background: var(--surface); color: var(--ink-3); cursor: pointer;
-    font: inherit; font-size: 11px; font-weight: 600; padding: 4px 11px;
-    letter-spacing: 0.06em;
+    border: none; background: var(--sunken); color: var(--ink-3); cursor: pointer;
+    font: inherit; font-size: 11px; font-weight: 650; padding: 5px 13px;
+    letter-spacing: 0.07em; transition: background 120ms, color 120ms;
   }
+  .modes button:hover:not(.on) { color: var(--ink); }
   .modes button + button { border-left: 1px solid var(--line-mid); }
   .modes button.on { background: #2c5c9e; color: #eef4fc; }
   .mode-help { font-size: 12px; color: var(--ink-3); }
@@ -380,17 +394,18 @@
   .ask-row { display: flex; gap: 7px; }
   .ask-row input {
     flex: 1; background: var(--sunken); color: var(--ink);
-    border: 1px solid var(--line-mid); border-radius: var(--r); padding: 8px 11px;
-    font: inherit; font-size: 13px;
+    border: 1px solid var(--line-mid); border-radius: 5px; padding: 10px 13px;
+    font: inherit; font-size: 13.5px;
   }
   .ask-row input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
   .ask-row button {
-    background: var(--surface); color: var(--accent);
-    border: 1px solid var(--line-mid); border-radius: var(--r);
-    padding: 0 16px; font: inherit; font-weight: 600; font-size: 13px; cursor: pointer;
+    background: #2c5c9e; color: #eef4fc; border: 1px solid #3568ae;
+    border-radius: 5px; padding: 0 20px; font: inherit; font-weight: 650;
+    font-size: 13px; cursor: pointer;
   }
+  .ask-row button:hover:not(:disabled) { background: #3568ae; }
   .ask-row button:hover:not(:disabled) { border-color: var(--accent); }
-  .ask-row button:disabled { color: var(--ink-3); cursor: default; }
+  .ask-row button:disabled { background: var(--line-mid); border-color: var(--line-mid); color: var(--ink-3); cursor: default; }
   .suggests { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 14px; }
 
   details summary { list-style: none; }
@@ -850,13 +865,21 @@ function ForDevelopers({ data }) {
   );
 }
 
-const SUGGESTS = [
-  "Which team owns this?",
-  "Why is confidence only Medium?",
-  "Have we seen this before?",
-  "What should I check next?",
-  "What should I not do?",
-];
+const SUGGESTS = {
+  PROJECT: [
+    "Which team owns this?",
+    "Why this confidence level?",
+    "Have we seen this before?",
+    "What should I check next?",
+    "What should I not do?",
+  ],
+  GENERAL: [
+    "What else could cause this?",
+    "How do I verify it is the gateway?",
+    "Show me the config to change",
+    "What would you check first?",
+  ],
+};
 
 // The conversational layer. PROJECT answers only from allowlisted lookups
 // against this investigation; GENERAL answers from the model's own knowledge
@@ -866,6 +889,9 @@ function AskTheDiagnosis({ data }) {
   const [turns, setTurns] = useState([]);
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
+  const lastMode = turns.length
+    ? (turns.filter((t) => t.meta).slice(-1)[0] || {}).meta?.mode
+    : mode;
 
   const send = useCallback((text) => {
     const question = (text ?? q).trim();
@@ -912,13 +938,13 @@ function AskTheDiagnosis({ data }) {
         <span className="mode-help">
           {mode === "PROJECT"
             ? "Grounded — answers only from this investigation and the project config."
-            : "AI knowledge — general technical questions, not evidence about this incident."}
+            : "Advisory — reasons about this incident with wider technical knowledge. Suggestions, not findings."}
         </span>
       </div>
 
-      {turns.length === 0 && (
+      {(turns.length === 0 || lastMode !== mode) && (
         <div className="suggests">
-          {SUGGESTS.map((s) => (
+          {(SUGGESTS[mode] || SUGGESTS.PROJECT).map((s) => (
             <button type="button" className="chip" key={s} onClick={() => send(s)}>
               {s}
             </button>
@@ -935,7 +961,7 @@ function AskTheDiagnosis({ data }) {
               <div className="turn-bot" key={i}>
                 {t.meta && (
                   <span className={"bot-badge " + (t.meta.mode === "GENERAL" ? "general" : "project")}>
-                    {t.meta.mode === "GENERAL" ? "GENERAL — AI KNOWLEDGE" : "PROJECT — GROUNDED"}
+                    {t.meta.mode === "GENERAL" ? "GENERAL — ADVISORY" : "PROJECT — GROUNDED"}
                   </span>
                 )}
                 {t.meta && t.meta.mode === "GENERAL"
@@ -1074,7 +1100,7 @@ function Result({ data }) {
 function App() {
   const [log, setLog] = useState("");
   const [samples, setSamples] = useState([]);
-  const [allConnected, setAllConnected] = useState(false);
+  const [allConnected, setAllConnected] = useState(true);
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -1118,6 +1144,7 @@ function App() {
           {health ? health.config_dir && "BulkSuppliers Supplier Sync" : ""}
         </span>
         <div className="spacer" />
+        {health && <span className="live"><i />Engine ready</span>}
       </header>
 
       <div className="layout">
