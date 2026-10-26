@@ -11,3 +11,6 @@ secrets.json
 predictions.jsonl
 .venv/
 venv/
+
+# PowerPoint lock files
+~$*
